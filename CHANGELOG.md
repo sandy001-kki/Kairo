@@ -6,6 +6,13 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- End-to-end MCP integration smoke test: spawns the built server over real stdio,
+  performs the SDK handshake, exercises the full tool/prompt/resource surface and a
+  complete session lifecycle, and asserts on-disk `.kairo/` artifacts plus
+  cross-process anti-rescan resume. Self-contained (builds in `beforeAll`).
+
 ## [0.3.0] - 2026-05-19
 
 ### Added
