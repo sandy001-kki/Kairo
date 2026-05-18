@@ -23,6 +23,8 @@ function emptyState(id: string): SessionState {
     retries: 0,
     heartbeats: 0,
     toolCalls: 0,
+    compactions: 0,
+    clarificationLoops: 0,
     cumulativeDiffBytes: 0,
     rereadCounts: {},
   };
@@ -143,6 +145,14 @@ export function applyEvent(state: SessionState, event: KairoEvent): SessionState
     }
     case 'session.ended': {
       s.status = 'ended';
+      break;
+    }
+    case 'compaction.observed': {
+      s.compactions += 1;
+      break;
+    }
+    case 'clarification.recorded': {
+      s.clarificationLoops += 1;
       break;
     }
     case 'note.recorded':

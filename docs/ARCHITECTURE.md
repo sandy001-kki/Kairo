@@ -93,18 +93,18 @@ CHECKPOINT_NOW`. The directive is attached to every tool response.
 
 ## 6. Roadmap (semantic versioning)
 
-| Version   | Scope                                                                                                                        |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| 0.1.0     | MCP server, event-sourced storage, session/checkpoint/continuation, redaction, pressure model                                |
-| **0.2.0** | Repository intelligence: fingerprint + framework/dependency/entrypoint detection, cached to kill rescanning — _this release_ |
-| 0.3.0     | Risk engine + richer cooperative pressure signals; conservatism scales with pressure                                         |
-| 0.4.0     | GitHub engine: semantic commits, changelog, release/tag orchestration                                                        |
-| 0.5.0     | Flow/graph engine (Mermaid): dependency, module, service, runtime graphs                                                     |
-| 0.6.0     | Vector memory + semantic architecture search                                                                                 |
-| 0.7.0     | Multi-agent / distributed memory coordination                                                                                |
-| 0.8.0     | Enterprise: telemetry, analytics, team coordination                                                                          |
-| 0.9.0     | IDE/dashboard surfaces (VS Code, Cursor, web)                                                                                |
-| 1.0.0     | Stable production release                                                                                                    |
+| Version   | Scope                                                                                                       |
+| --------- | ----------------------------------------------------------------------------------------------------------- |
+| 0.1.0     | MCP server, event-sourced storage, session/checkpoint/continuation, redaction, pressure model               |
+| 0.2.0     | Repository intelligence: fingerprint + framework/dependency/entrypoint detection, cached to kill rescanning |
+| **0.3.0** | Risk engine + richer cooperative pressure signals; conservatism scales with pressure — _this release_       |
+| 0.4.0     | GitHub engine: semantic commits, changelog, release/tag orchestration                                       |
+| 0.5.0     | Flow/graph engine (Mermaid): dependency, module, service, runtime graphs                                    |
+| 0.6.0     | Vector memory + semantic architecture search                                                                |
+| 0.7.0     | Multi-agent / distributed memory coordination                                                               |
+| 0.8.0     | Enterprise: telemetry, analytics, team coordination                                                         |
+| 0.9.0     | IDE/dashboard surfaces (VS Code, Cursor, web)                                                               |
+| 1.0.0     | Stable production release                                                                                   |
 
 Security was deliberately pulled into 0.1.0 rather than a later phase: every checkpoint
 persists potentially secret content from the first write, so the redaction boundary
@@ -139,3 +139,26 @@ make the cache useless (it would bust on every keystroke) and slow on large repo
 `kairo_session_start` scans only when no artifact is cached; every resume reuses the
 cache and returns a compact summary. This is the concrete mechanism by which Kairo
 stops agents from re-deriving the repository each session.
+
+## 9. Risk engine & guardrail (v0.3.0)
+
+Two orthogonal axes are tracked separately and then combined:
+
+- **Context-loss pressure** (`src/pressure/`) — _will the agent lose its mind soon?_
+- **Engineering risk** (`src/core/risk/riskEngine.ts`) — _how dangerous is this
+  change?_ Path sensitivity, change-kind (deletion ≫ create), secret-adjacency,
+  unresolved-error and high-risk-breadth escalation. Deliberately biased toward
+  over-rating: a recorded high/medium factor is never downgraded by a benign
+  change-kind multiplier.
+
+`guardrail.ts` is the only place they meet. A decision matrix maps
+`(pressure directive × risk level) → ALLOW | CAUTION | HOLD`. The key property —
+**conservatism scales with pressure** — falls out of the matrix: a HIGH-risk change
+is `CAUTION` while calm but `HOLD` once Kairo is signalling `CHECKPOINT_NOW`, because
+making an unsafe change immediately before losing context is the worst failure mode.
+`HOLD` is advisory (cooperative model, ADR-0002), but it is the strongest signal
+Kairo emits and is wired to make checkpointing the path of least resistance.
+
+The two new cooperative signals — `compaction` (the agent reports its context was
+summarized) and `clarification` (it had to re-ask the user) — are the strongest
+loss proxies the agent can self-report and are weighted accordingly.

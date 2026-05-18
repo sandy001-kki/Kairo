@@ -6,6 +6,26 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-19
+
+### Added
+
+- **Risk Engine** (`src/core/risk/riskEngine.ts`): classifies the _engineering_ risk
+  of a change set or the whole session (distinct from context-loss pressure).
+  Path sensitivity + change-kind weighting + deletion + secret-adjacency +
+  unresolved-error and high-risk-breadth escalation. Biased toward over-rating; a
+  recorded high/medium factor can never be downgraded by a benign change-kind.
+- **Guardrail** (`src/core/risk/guardrail.ts`): combines engineering risk with
+  context-loss pressure into `ALLOW` / `CAUTION` / `HOLD`. Conservatism scales with
+  pressure — the same change flips to `HOLD` as the session degrades.
+- New MCP tool **`kairo_assess`**: call before a risky change to get the guardrail
+  decision; `kairo_session_status` now reports session engineering risk.
+- **Richer cooperative pressure signals**: `kairo_record` accepts `compaction`
+  (agent's context was summarized — a strong loss signal) and `clarification`
+  (agent had to re-ask the user). Pressure model reweighted to include both.
+- Checkpoints now embed the engineering `RiskAssessment`, surfaced in the
+  continuation brief so the next agent inherits risk context.
+
 ## [0.2.0] - 2026-05-18
 
 ### Added
@@ -53,6 +73,7 @@ All notable changes to Kairo are documented here. The format is based on
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/sandy001-kki/Kairo/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/sandy001-kki/Kairo/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/sandy001-kki/Kairo/releases/tag/v0.1.0

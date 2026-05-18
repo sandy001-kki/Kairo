@@ -15,15 +15,22 @@ export const CONTINUITY_PROMPT_TEXT = `You are working through Kairo, a persiste
    - kind:"error" / "error-resolved" as failures appear and are fixed
    - kind:"retry" when you re-attempt something that failed
    - kind:"pending" / "completed" / "blocker" to track work items
+   - kind:"compaction" if your context was summarized/compacted, and
+     kind:"clarification" if you had to re-ask the user — these are the strongest
+     context-loss signals you can give Kairo; always report them.
 
 3. PULSE: Every few steps call \`kairo_heartbeat\`. If you re-read a file you had
-   already read, pass its path as \`reread\` — repeated re-reads are Kairo's strongest
-   signal that context is being lost.
+   already read, pass its path as \`reread\` — repeated re-reads are a strong signal
+   that context is being lost.
 
-4. DIRECTIVE: Every Kairo response carries a directive. On \`CHECKPOINT_SOON\` finish
+4. ASSESS: Before a risky change (auth, payments, infra, deletions, schema), call
+   \`kairo_assess\` with the files/intent. It returns ALLOW / CAUTION / HOLD and gets
+   stricter as pressure rises. On HOLD, checkpoint instead of making the change.
+
+5. DIRECTIVE: Every Kairo response carries a directive. On \`CHECKPOINT_SOON\` finish
    the current step then checkpoint. On \`CHECKPOINT_NOW\` call \`kairo_checkpoint\`
    immediately, before any further risky change.
 
-5. END: Call \`kairo_session_end\` so the next agent gets a clean, exact handoff.
+6. END: Call \`kairo_session_end\` so the next agent gets a clean, exact handoff.
 
 Treat Kairo as a senior engineer supervising you: it remembers so you don't have to.`;

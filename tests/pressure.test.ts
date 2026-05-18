@@ -9,6 +9,8 @@ const zero: PressureSignals = {
   retries: 0,
   unresolvedErrors: 0,
   repeatedRereads: 0,
+  compactions: 0,
+  clarificationLoops: 0,
   elapsedMs: 0,
 };
 
@@ -27,6 +29,8 @@ describe('pressure model', () => {
       retries: 1000,
       unresolvedErrors: 1000,
       repeatedRereads: 1000,
+      compactions: 1000,
+      clarificationLoops: 1000,
       elapsedMs: 10 ** 12,
     });
     expect(p.score).toBeLessThanOrEqual(1);
@@ -58,6 +62,8 @@ describe('pressure model', () => {
       retries: 8,
       unresolvedErrors: 5,
       repeatedRereads: 9,
+      compactions: 2,
+      clarificationLoops: 3,
       elapsedMs: 58 * 60_000,
     });
     expect(p.directive).toBe('CHECKPOINT_SOON');

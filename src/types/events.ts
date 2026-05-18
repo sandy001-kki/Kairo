@@ -16,6 +16,8 @@ export type EventType =
   | 'error.resolved'
   | 'retry.recorded'
   | 'note.recorded'
+  | 'compaction.observed'
+  | 'clarification.recorded'
   | 'work.completed'
   | 'work.pending'
   | 'blocker.recorded'

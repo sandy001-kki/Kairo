@@ -17,6 +17,8 @@ export interface EventPayloads {
   'error.resolved': { message: string };
   'retry.recorded': { what?: string };
   'note.recorded': { note: string };
+  'compaction.observed': { note?: string };
+  'clarification.recorded': { note?: string };
   'work.completed': { item: string };
   'work.pending': { item: string };
   'blocker.recorded': { item: string };

@@ -8,6 +8,7 @@ import type {
 import type { Clock } from '../../utils/time.js';
 import { newId } from '../../utils/ids.js';
 import { buildContinuationMarkdown, deriveRemaining } from '../continuation/continuationBuilder.js';
+import { assessSession } from '../risk/riskEngine.js';
 
 export interface CheckpointInput {
   reason: CheckpointReason;
@@ -60,6 +61,7 @@ export class CheckpointManager {
       decisions: state.decisions,
       unresolvedErrors: state.errors.filter((e) => !e.resolved),
       pressure,
+      risk: assessSession(state),
       continuationRef: continuationName,
     };
 

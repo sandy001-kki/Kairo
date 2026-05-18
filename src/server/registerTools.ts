@@ -17,6 +17,8 @@ const RECORD_KINDS = [
   'error-resolved',
   'retry',
   'note',
+  'compaction',
+  'clarification',
   'completed',
   'pending',
   'blocker',
@@ -84,6 +86,10 @@ function toRecordInput(i: {
       return { kind: 'retry', ...(i.what !== undefined ? { what: i.what } : {}) };
     case 'note':
       return { kind: 'note', note: need(i.note, 'note') };
+    case 'compaction':
+      return { kind: 'compaction', ...(i.note !== undefined ? { note: i.note } : {}) };
+    case 'clarification':
+      return { kind: 'clarification', ...(i.note !== undefined ? { note: i.note } : {}) };
     case 'completed':
       return { kind: 'completed', item: need(i.item, 'item') };
     case 'pending':
@@ -151,9 +157,11 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
     () => {
       try {
         const { state, pressure } = sessions.status();
+        const risk = sessions.sessionRisk();
         return ok(
           `Session ${state.id} (${state.status}) — ${Object.keys(state.changedFiles).length} files changed, ` +
-            `${state.errors.filter((e) => !e.resolved).length} unresolved error(s).`,
+            `${state.errors.filter((e) => !e.resolved).length} unresolved error(s). ` +
+            `Engineering risk: ${risk.level.toUpperCase()} (${risk.score}).`,
           {
             id: state.id,
             agent: state.agent,
@@ -165,6 +173,7 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
             completedWork: state.completedWork,
             blockers: state.blockers,
             errors: state.errors,
+            risk,
             lastCheckpointId: state.lastCheckpointId ?? null,
           },
           pressure,
@@ -180,8 +189,10 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
     {
       title: 'Record an engineering event',
       description:
-        'Log a file change / decision / command / error / retry / note / work item to ' +
-        'Kairo memory. Returns the updated pressure directive.',
+        'Log an event to Kairo memory: file/decision/command/error/error-resolved/' +
+        'retry/note/completed/pending/blocker, plus "compaction" (report when your ' +
+        'context was summarized/compacted) and "clarification" (you had to re-ask the ' +
+        'user) — both are strong context-loss signals. Returns the pressure directive.',
       inputSchema: {
         kind: z.enum(RECORD_KINDS),
         path: z.string().optional(),
@@ -355,6 +366,49 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
           return ok('No repo intelligence cached yet. Call kairo_repo_scan.', { found: false });
         }
         return ok(summarizeIntelligence(intel), { found: true, fingerprint: intel.fingerprint });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_assess',
+    {
+      title: 'Assess engineering risk vs. context-loss pressure',
+      description:
+        'Call BEFORE a risky change. Returns ALLOW / CAUTION / HOLD. Kairo gets more ' +
+        'conservative as pressure rises, so the same change can flip to HOLD late in a ' +
+        'session. With no files, assesses accumulated session risk.',
+      inputSchema: {
+        intent: z.string().optional().describe('What you are about to do.'),
+        files: z
+          .array(
+            z.object({
+              path: z.string(),
+              changeKind: z.enum(CHANGE_KINDS).optional(),
+              risk: z.enum(RISKS).optional(),
+            }),
+          )
+          .optional(),
+      },
+    },
+    ({ intent, files }) => {
+      try {
+        const g = sessions.assess({
+          ...(intent !== undefined ? { intent } : {}),
+          ...(files !== undefined ? { files } : {}),
+        });
+        return ok(
+          `${g.directive}\n\n${g.reasons.join('\n')}`,
+          {
+            decision: g.decision,
+            risk: g.risk,
+            pressureDirective: g.pressure.directive,
+            pressureScore: g.pressure.score,
+          },
+          g.pressure,
+        );
       } catch (e) {
         return fail(e);
       }

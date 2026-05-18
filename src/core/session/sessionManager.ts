@@ -2,7 +2,9 @@ import type { StorageAdapter } from '../../storage/storageAdapter.js';
 import type {
   ChangeKind,
   Checkpoint,
+  Guidance,
   PressureSnapshot,
+  RiskAssessment,
   RiskLevel,
   SessionState,
 } from '../../types/domain.js';
@@ -13,6 +15,8 @@ import { applyEvent, reduceAll, repeatedRereads, unresolvedErrors } from './redu
 import { computePressure } from '../../pressure/pressureModel.js';
 import { CheckpointManager, type CheckpointInput } from '../checkpoint/checkpointManager.js';
 import { inferRisk } from '../risk/riskHeuristics.js';
+import { assessChange, assessSession } from '../risk/riskEngine.js';
+import { evaluateGuardrail } from '../risk/guardrail.js';
 import { RepoScanner } from '../repo/repoScanner.js';
 import type { RepoIntelligence } from '../repo/types.js';
 import type { Clock } from '../../utils/time.js';
@@ -46,6 +50,8 @@ export type RecordKind =
   | { kind: 'error-resolved'; message: string }
   | { kind: 'retry'; what?: string }
   | { kind: 'note'; note: string }
+  | { kind: 'compaction'; note?: string }
+  | { kind: 'clarification'; note?: string }
   | { kind: 'completed'; item: string }
   | { kind: 'pending'; item: string }
   | { kind: 'blocker'; item: string };
@@ -158,6 +164,20 @@ export class SessionManager {
       case 'note':
         await this.append(sid, 'note.recorded', { note: input.note });
         break;
+      case 'compaction':
+        await this.append(
+          sid,
+          'compaction.observed',
+          input.note !== undefined ? { note: input.note } : {},
+        );
+        break;
+      case 'clarification':
+        await this.append(
+          sid,
+          'clarification.recorded',
+          input.note !== undefined ? { note: input.note } : {},
+        );
+        break;
       case 'completed':
         await this.append(sid, 'work.completed', { item: input.item });
         break;
@@ -215,6 +235,38 @@ export class SessionManager {
 
   status(): { state: SessionState; pressure: PressureSnapshot } {
     return { state: this.requireSession(), pressure: this.pressure() };
+  }
+
+  /** Aggregate engineering risk of everything changed so far this session. */
+  sessionRisk(): RiskAssessment {
+    return assessSession(this.requireSession());
+  }
+
+  /**
+   * Evaluate a proposed change against engineering risk AND current context-loss
+   * pressure. Conservatism scales with pressure (see guardrail.ts): the same change
+   * gets a stricter decision as the session degrades. With no files supplied, falls
+   * back to the accumulated session risk.
+   */
+  assess(args: {
+    intent?: string | undefined;
+    files?:
+      | Array<{ path: string; changeKind?: ChangeKind | undefined; risk?: RiskLevel | undefined }>
+      | undefined;
+  }): Guidance {
+    this.requireSession();
+    const risk =
+      args.files && args.files.length > 0
+        ? assessChange(
+            args.files.map((f) => ({
+              path: f.path,
+              changeKind: f.changeKind ?? 'modified',
+              ...(f.risk !== undefined ? { declaredRisk: f.risk } : {}),
+            })),
+            args.intent,
+          )
+        : assessSession(this.requireSession());
+    return evaluateGuardrail(risk, this.pressure());
   }
 
   /** Latest persisted checkpoint across all sessions (for the MCP resource). */
@@ -311,6 +363,8 @@ export class SessionManager {
       retries: 0,
       heartbeats: 0,
       toolCalls: 0,
+      compactions: 0,
+      clarificationLoops: 0,
       cumulativeDiffBytes: 0,
       rereadCounts: {},
     };
@@ -326,6 +380,8 @@ export class SessionManager {
         retries: 0,
         unresolvedErrors: 0,
         repeatedRereads: 0,
+        compactions: 0,
+        clarificationLoops: 0,
         elapsedMs: 0,
       });
     }
@@ -337,6 +393,8 @@ export class SessionManager {
       retries: s.retries,
       unresolvedErrors: unresolvedErrors(s),
       repeatedRereads: repeatedRereads(s),
+      compactions: s.compactions,
+      clarificationLoops: s.clarificationLoops,
       elapsedMs: Math.max(0, this.clock.now() - startedMs),
     });
   }

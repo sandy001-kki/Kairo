@@ -16,7 +16,15 @@ the next agent an exact continuation brief instead of a blank slate.
 
 ## Status
 
-**v0.2.0 — Repository Intelligence.** Kairo now scans a repo once, fingerprints its
+**v0.3.0 — Risk Engine + conservatism that scales with pressure.** Kairo now
+classifies the _engineering_ risk of changes (sensitive paths, deletions,
+secret-adjacency, unresolved-error breadth) and combines it with context-loss
+pressure in a guardrail: `kairo_assess` returns `ALLOW` / `CAUTION` / `HOLD`, and the
+same change escalates to `HOLD` as the session degrades. `kairo_record` gained
+`compaction` and `clarification` signals; checkpoints carry the risk assessment into
+the continuation brief.
+
+**v0.2.0 — Repository Intelligence.** Kairo scans a repo once, fingerprints its
 structure + dependencies, and reuses that cached understanding on every resume so
 agents stop re-deriving the codebase. `kairo_session_start` returns a compact repo
 summary (frameworks, languages, entry points); `kairo_repo_scan` / `kairo_repo_intel`
@@ -92,19 +100,20 @@ default; commit it deliberately if you want shared team memory.
 3. When Kairo returns `CHECKPOINT_NOW`, call `kairo_checkpoint`.
 4. `kairo_session_end` writes the final checkpoint and continuation brief.
 
-## MCP surface (v0.2.0)
+## MCP surface (v0.3.0)
 
-| Tool                   | Purpose                                                       |
-| ---------------------- | ------------------------------------------------------------- |
-| `kairo_session_start`  | Begin/resume; returns prior brief + cached repo intelligence  |
-| `kairo_session_status` | Current ledger summary + pressure + directive                 |
-| `kairo_record`         | Log a file change / decision / command / error / retry / note |
-| `kairo_heartbeat`      | Cheap pulse; returns pressure + directive                     |
-| `kairo_checkpoint`     | Create a durable, sanitized, resumable checkpoint             |
-| `kairo_continuation`   | Fetch the latest continuation brief for the next agent        |
-| `kairo_session_end`    | Finalize the session with a closing checkpoint                |
-| `kairo_repo_scan`      | Cached repo intelligence; `force` to rescan                   |
-| `kairo_repo_intel`     | Cached repo intelligence summary (no scan)                    |
+| Tool                   | Purpose                                                              |
+| ---------------------- | -------------------------------------------------------------------- |
+| `kairo_session_start`  | Begin/resume; returns prior brief + cached repo intelligence         |
+| `kairo_session_status` | Current ledger summary + pressure + directive                        |
+| `kairo_record`         | Log a file change / decision / command / error / retry / note        |
+| `kairo_heartbeat`      | Cheap pulse; returns pressure + directive                            |
+| `kairo_checkpoint`     | Create a durable, sanitized, resumable checkpoint                    |
+| `kairo_continuation`   | Fetch the latest continuation brief for the next agent               |
+| `kairo_session_end`    | Finalize the session with a closing checkpoint                       |
+| `kairo_repo_scan`      | Cached repo intelligence; `force` to rescan                          |
+| `kairo_repo_intel`     | Cached repo intelligence summary (no scan)                           |
+| `kairo_assess`         | Risk × pressure guardrail before a risky change (ALLOW/CAUTION/HOLD) |
 
 Resources: `kairo://session/current`, `kairo://checkpoint/latest`.
 Prompt: `kairo_continuity` (the cooperation contract for agents).

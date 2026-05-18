@@ -29,6 +29,15 @@ export function buildContinuationMarkdown(cp: Checkpoint): string {
   L.push(cp.task || '_No task description recorded._');
   L.push('');
 
+  L.push(`## Engineering risk at checkpoint`);
+  L.push(`**${cp.risk.level.toUpperCase()}** (score ${cp.risk.score}).`);
+  if (cp.risk.factors.length === 0) {
+    L.push('_No notable risk factors._');
+  } else {
+    for (const f of cp.risk.factors) L.push(`- [${f.level.toUpperCase()}] ${f.detail}`);
+  }
+  L.push('');
+
   L.push(`## Completed`);
   list(cp.completedWork, 'Nothing explicitly marked complete.');
   L.push('');

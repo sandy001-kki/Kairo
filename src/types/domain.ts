@@ -53,6 +53,10 @@ export interface PressureSignals {
   unresolvedErrors: number;
   /** Re-reads of files already read — a strong proxy for context loss. */
   repeatedRereads: number;
+  /** Times the agent reported its context was compacted/summarized. */
+  compactions: number;
+  /** Times the agent had to re-ask the user to re-explain (loss proxy). */
+  clarificationLoops: number;
   elapsedMs: number;
 }
 
@@ -85,6 +89,8 @@ export interface SessionState {
   retries: number;
   heartbeats: number;
   toolCalls: number;
+  compactions: number;
+  clarificationLoops: number;
   cumulativeDiffBytes: number;
   /** path → number of times re-read. */
   rereadCounts: Record<string, number>;
@@ -108,6 +114,38 @@ export interface Checkpoint {
   decisions: Decision[];
   unresolvedErrors: ErrorRecord[];
   pressure: PressureSnapshot;
+  /** Aggregate engineering risk of the session at checkpoint time. */
+  risk: RiskAssessment;
   /** Filename of the generated continuation brief markdown. */
   continuationRef: string;
+}
+
+// ── Risk engine (v0.3.0) ────────────────────────────────────────────────────
+
+export interface RiskFactor {
+  /** Stable tag, e.g. "auth-path", "deletion", "secret-adjacent". */
+  code: string;
+  level: RiskLevel;
+  detail: string;
+}
+
+export interface RiskAssessment {
+  level: RiskLevel;
+  /** Bounded [0,1] aggregate engineering risk of the operation/session. */
+  score: number;
+  factors: RiskFactor[];
+}
+
+/**
+ * Output of combining engineering risk with context-loss pressure. Kairo cannot
+ * truly block an agent (cooperative model) — `HOLD` is a strongly-worded advisory.
+ */
+export type GuardDecision = 'ALLOW' | 'CAUTION' | 'HOLD';
+
+export interface Guidance {
+  decision: GuardDecision;
+  risk: RiskAssessment;
+  pressure: PressureSnapshot;
+  directive: string;
+  reasons: string[];
 }

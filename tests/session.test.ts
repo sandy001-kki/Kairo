@@ -100,4 +100,36 @@ describe('SessionManager continuity loop', () => {
     const serialized = JSON.stringify(sessions);
     expect(serialized).not.toContain('AKIAIOSFODNN7EXAMPLE');
   });
+
+  it('compaction/clarification signals raise pressure and flip the guardrail', async () => {
+    const m = makeManager();
+    await m.init();
+    await m.startSession({ agent: 'a', task: 't', projectRoot: root });
+
+    const calm = m.assess({ files: [{ path: 'src/auth/login.ts', changeKind: 'deleted' }] });
+    expect(calm.decision).toBe('CAUTION');
+
+    // Drive enough cooperative signals to escalate pressure past the band where a
+    // HIGH-risk change is no longer merely CAUTION.
+    for (let i = 0; i < 5; i++) await m.record({ kind: 'compaction', note: `compaction ${i}` });
+    for (let i = 0; i < 5; i++) await m.record({ kind: 'clarification' });
+    for (let i = 0; i < 45; i++)
+      await m.record({ kind: 'file', path: `src/mod${i}.ts`, changeKind: 'modified' });
+    for (let i = 0; i < 15; i++) await m.record({ kind: 'retry', what: `attempt ${i}` });
+
+    const stressed = m.assess({ files: [{ path: 'src/auth/login.ts', changeKind: 'deleted' }] });
+    expect(stressed.pressure.score).toBeGreaterThan(calm.pressure.score);
+    expect(stressed.pressure.directive).not.toBe('CONTINUE');
+    expect(stressed.decision).toBe('HOLD');
+  });
+
+  it('checkpoints carry an engineering risk assessment into the brief', async () => {
+    const m = makeManager();
+    await m.init();
+    await m.startSession({ agent: 'a', task: 't', projectRoot: root });
+    await m.record({ kind: 'file', path: 'src/payment/charge.ts', changeKind: 'modified' });
+    const cp = await m.checkpoint({ reason: 'manual' });
+    expect(cp.checkpoint.risk.level).toBe('high');
+    expect(cp.brief).toContain('Engineering risk at checkpoint');
+  });
 });
