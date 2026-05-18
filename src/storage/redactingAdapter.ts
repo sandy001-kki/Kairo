@@ -1,6 +1,7 @@
 import type { StorageAdapter } from './storageAdapter.js';
 import type { AuditEntry, KairoEvent } from '../types/events.js';
 import type { Checkpoint, SessionState } from '../types/domain.js';
+import type { RepoIntelligence } from '../core/repo/types.js';
 import { sanitize } from '../security/redactor.js';
 import type { Clock } from '../utils/time.js';
 import { logger } from '../utils/logger.js';
@@ -64,6 +65,15 @@ export function withRedaction(inner: StorageAdapter, clock: Clock): StorageAdapt
 
     loadContinuation: (name) => inner.loadContinuation(name),
     loadLatestContinuation: () => inner.loadLatestContinuation(),
+
+    async saveIntelligence(intel: RepoIntelligence): Promise<void> {
+      const { value, findings } = sanitize(intel);
+      await inner.saveIntelligence(value);
+      await auditFindings('repo-intelligence', findings);
+    },
+
+    loadLatestIntelligence: () => inner.loadLatestIntelligence(),
+    loadIntelligenceByFingerprint: (fp) => inner.loadIntelligenceByFingerprint(fp),
 
     // Audit entries are constructed internally and never carry secret values.
     audit: (entry: AuditEntry) => inner.audit(entry),

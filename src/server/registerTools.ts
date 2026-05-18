@@ -1,8 +1,13 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { SessionManager, RecordKind } from '../core/session/sessionManager.js';
+import { summarizeIntelligence } from '../core/repo/summary.js';
 import { ok, fail } from './responses.js';
 import { KairoError } from '../utils/errors.js';
+
+function projectRootFrom(explicit?: string): string {
+  return explicit ?? process.env.KAIRO_PROJECT_ROOT ?? process.cwd();
+}
 
 const RECORD_KINDS = [
   'file',
@@ -109,15 +114,25 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
         const r = await sessions.startSession({
           agent,
           task,
-          projectRoot: projectRoot ?? process.env.KAIRO_PROJECT_ROOT ?? process.cwd(),
+          projectRoot: projectRootFrom(projectRoot),
         });
         const summary = r.resumed
           ? `Resumed. A prior continuation brief was found and is included below — resume from it; do not rescan the repo.`
           : `New session started. No prior continuation brief found.`;
+        const intelBlock = r.intelligence
+          ? `\n\n--- REPO INTELLIGENCE (${r.intelligenceFromCache ? 'cached' : 'freshly scanned'}) ---\n` +
+            summarizeIntelligence(r.intelligence)
+          : '';
         return ok(
           `${summary}\n\nSession: ${r.sessionId}` +
-            (r.priorBrief ? `\n\n--- PRIOR CONTINUATION BRIEF ---\n${r.priorBrief}` : ''),
-          { sessionId: r.sessionId, resumed: r.resumed },
+            (r.priorBrief ? `\n\n--- PRIOR CONTINUATION BRIEF ---\n${r.priorBrief}` : '') +
+            intelBlock,
+          {
+            sessionId: r.sessionId,
+            resumed: r.resumed,
+            intelligenceFromCache: r.intelligenceFromCache,
+            fingerprint: r.intelligence?.fingerprint ?? null,
+          },
           r.pressure,
         );
       } catch (e) {
@@ -284,6 +299,62 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
           `Session ended. Closing checkpoint ${r.checkpoint.id}.\n\n--- CONTINUATION BRIEF ---\n${r.brief}`,
           { checkpointId: r.checkpoint.id },
         );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_repo_scan',
+    {
+      title: 'Scan / refresh repository intelligence',
+      description:
+        'Return cached repo intelligence (frameworks, languages, entry points, ' +
+        'structural fingerprint). Pass force:true to rescan. Prefer the cached result — ' +
+        'rescanning is what Kairo exists to avoid.',
+      inputSchema: {
+        force: z.boolean().optional().describe('Rescan even if a cached artifact exists.'),
+        projectRoot: z.string().optional(),
+      },
+    },
+    async ({ force, projectRoot }) => {
+      try {
+        const r = await sessions.scanRepo(projectRootFrom(projectRoot), force ?? false);
+        const note = r.fromCache
+          ? 'Served from cache (no rescan).'
+          : r.changed
+            ? 'Rescanned — repository fingerprint CHANGED since last scan.'
+            : 'Rescanned — fingerprint unchanged.';
+        return ok(`${note}\n\n${summarizeIntelligence(r.intelligence)}`, {
+          fromCache: r.fromCache,
+          changed: r.changed,
+          fingerprint: r.intelligence.fingerprint,
+          frameworks: r.intelligence.frameworks,
+          entryPoints: r.intelligence.entryPoints,
+          languages: r.intelligence.languages,
+          inventory: r.intelligence.inventory,
+        });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_repo_intel',
+    {
+      title: 'Get cached repository intelligence',
+      description: 'Return the cached repo intelligence summary without scanning.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const intel = await sessions.getIntelligence();
+        if (!intel) {
+          return ok('No repo intelligence cached yet. Call kairo_repo_scan.', { found: false });
+        }
+        return ok(summarizeIntelligence(intel), { found: true, fingerprint: intel.fingerprint });
       } catch (e) {
         return fail(e);
       }

@@ -4,6 +4,7 @@ import type { StorageAdapter } from './storageAdapter.js';
 import { kairoPaths, type KairoPaths } from './paths.js';
 import type { AuditEntry, KairoEvent } from '../types/events.js';
 import type { Checkpoint, SessionState } from '../types/domain.js';
+import type { RepoIntelligence } from '../core/repo/types.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -29,6 +30,7 @@ export class FileStorageAdapter implements StorageAdapter {
       this.paths.checkpointsDir,
       this.paths.continuationsDir,
       this.paths.reportsDir,
+      this.paths.intelligenceDir,
     ]) {
       await mkdir(dir, { recursive: true });
     }
@@ -99,6 +101,20 @@ export class FileStorageAdapter implements StorageAdapter {
     const latest = await this.latestFile(this.paths.continuationsDir, '.md');
     if (!latest) return undefined;
     return readFile(join(this.paths.continuationsDir, latest), 'utf8');
+  }
+
+  async saveIntelligence(intel: RepoIntelligence): Promise<void> {
+    const body = JSON.stringify(intel, null, 2);
+    await this.writeAtomic(this.paths.intelligenceFile(intel.fingerprint), body);
+    await this.writeAtomic(this.paths.latestIntelligenceFile, body);
+  }
+
+  async loadLatestIntelligence(): Promise<RepoIntelligence | undefined> {
+    return this.readJson<RepoIntelligence>(this.paths.latestIntelligenceFile);
+  }
+
+  async loadIntelligenceByFingerprint(fp: string): Promise<RepoIntelligence | undefined> {
+    return this.readJson<RepoIntelligence>(this.paths.intelligenceFile(fp));
   }
 
   async audit(entry: AuditEntry): Promise<void> {

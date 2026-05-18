@@ -13,6 +13,8 @@ import { applyEvent, reduceAll, repeatedRereads, unresolvedErrors } from './redu
 import { computePressure } from '../../pressure/pressureModel.js';
 import { CheckpointManager, type CheckpointInput } from '../checkpoint/checkpointManager.js';
 import { inferRisk } from '../risk/riskHeuristics.js';
+import { RepoScanner } from '../repo/repoScanner.js';
+import type { RepoIntelligence } from '../repo/types.js';
 import type { Clock } from '../../utils/time.js';
 import { newId } from '../../utils/ids.js';
 import { KairoError } from '../../utils/errors.js';
@@ -22,6 +24,10 @@ export interface StartResult {
   resumed: boolean;
   /** Continuation brief from a prior session, if any — return this to the agent. */
   priorBrief?: string;
+  /** Cached/just-scanned repo intelligence so the agent need not rescan. */
+  intelligence?: RepoIntelligence;
+  /** True if intelligence came from cache; false if scanned during this start. */
+  intelligenceFromCache: boolean;
   pressure: PressureSnapshot;
 }
 
@@ -52,12 +58,14 @@ export type RecordKind =
 export class SessionManager {
   private current: SessionState | undefined;
   private readonly checkpoints: CheckpointManager;
+  private readonly scanner: RepoScanner;
 
   constructor(
     private readonly adapter: StorageAdapter,
     private readonly clock: Clock,
   ) {
     this.checkpoints = new CheckpointManager(adapter, clock);
+    this.scanner = new RepoScanner(clock);
   }
 
   async init(): Promise<void> {
@@ -86,10 +94,22 @@ export class SessionManager {
       await this.append(sessionId, 'session.resumed', { fromContinuation: 'latest' });
     }
 
+    // Anti-rescan core: reuse cached repo intelligence if present; only scan when
+    // none exists yet (first-ever session for this repo). Keeps resume cheap.
+    let intelligence = await this.adapter.loadLatestIntelligence();
+    let intelligenceFromCache = true;
+    if (!intelligence) {
+      intelligence = await this.scanner.scan(args.projectRoot);
+      await this.adapter.saveIntelligence(intelligence);
+      intelligenceFromCache = false;
+    }
+
     return {
       sessionId,
       resumed,
+      intelligenceFromCache,
       ...(priorBrief !== undefined ? { priorBrief } : {}),
+      ...(intelligence !== undefined ? { intelligence } : {}),
       pressure: this.pressure(),
     };
   }
@@ -205,6 +225,30 @@ export class SessionManager {
   /** Latest persisted continuation brief, if any. */
   latestContinuation(): Promise<string | undefined> {
     return this.adapter.loadLatestContinuation();
+  }
+
+  /** Cached repo intelligence, if any (no scan). */
+  getIntelligence(): Promise<RepoIntelligence | undefined> {
+    return this.adapter.loadLatestIntelligence();
+  }
+
+  /**
+   * Scan (or reuse) repo intelligence. With `force`, always rescans and persists.
+   * Without it, returns the cached artifact when present — that is the whole point:
+   * agents stop re-deriving repo understanding every session.
+   */
+  async scanRepo(
+    projectRoot: string,
+    force = false,
+  ): Promise<{ intelligence: RepoIntelligence; fromCache: boolean; changed: boolean }> {
+    const cached = await this.adapter.loadLatestIntelligence();
+    if (cached && !force) {
+      return { intelligence: cached, fromCache: true, changed: false };
+    }
+    const intelligence = await this.scanner.scan(projectRoot);
+    const changed = !cached || cached.fingerprint !== intelligence.fingerprint;
+    await this.adapter.saveIntelligence(intelligence);
+    return { intelligence, fromCache: false, changed };
   }
 
   async priorSessions(): Promise<SessionState[]> {

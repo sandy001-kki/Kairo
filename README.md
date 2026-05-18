@@ -16,7 +16,14 @@ the next agent an exact continuation brief instead of a blank slate.
 
 ## Status
 
-**v0.1.0 — Core continuity slice.** This release implements the heart of Kairo:
+**v0.2.0 — Repository Intelligence.** Kairo now scans a repo once, fingerprints its
+structure + dependencies, and reuses that cached understanding on every resume so
+agents stop re-deriving the codebase. `kairo_session_start` returns a compact repo
+summary (frameworks, languages, entry points); `kairo_repo_scan` / `kairo_repo_intel`
+expose it directly. Ordinary in-file edits do not bust the cache (the session ledger
+tracks those); dependency/structure changes do.
+
+**v0.1.0 — Core continuity slice.** The heart of Kairo:
 
 - A production MCP server (stdio transport, official SDK, strict TypeScript).
 - An **event-sourced storage engine** — append-only log + derived snapshots + markdown
@@ -85,17 +92,19 @@ default; commit it deliberately if you want shared team memory.
 3. When Kairo returns `CHECKPOINT_NOW`, call `kairo_checkpoint`.
 4. `kairo_session_end` writes the final checkpoint and continuation brief.
 
-## MCP surface (v0.1.0)
+## MCP surface (v0.2.0)
 
 | Tool                   | Purpose                                                       |
 | ---------------------- | ------------------------------------------------------------- |
-| `kairo_session_start`  | Begin/resume a session; returns prior continuation brief      |
+| `kairo_session_start`  | Begin/resume; returns prior brief + cached repo intelligence  |
 | `kairo_session_status` | Current ledger summary + pressure + directive                 |
 | `kairo_record`         | Log a file change / decision / command / error / retry / note |
 | `kairo_heartbeat`      | Cheap pulse; returns pressure + directive                     |
 | `kairo_checkpoint`     | Create a durable, sanitized, resumable checkpoint             |
 | `kairo_continuation`   | Fetch the latest continuation brief for the next agent        |
 | `kairo_session_end`    | Finalize the session with a closing checkpoint                |
+| `kairo_repo_scan`      | Cached repo intelligence; `force` to rescan                   |
+| `kairo_repo_intel`     | Cached repo intelligence summary (no scan)                    |
 
 Resources: `kairo://session/current`, `kairo://checkpoint/latest`.
 Prompt: `kairo_continuity` (the cooperation contract for agents).

@@ -6,6 +6,26 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-18
+
+### Added
+
+- **Repository Intelligence Engine.** One-time bounded repo scan producing a
+  `RepoIntelligence` artifact: file inventory, language breakdown, framework /
+  dependency detection (Node, Python, Go, Rust, JVM, Docker, K8s, GitHub Actions),
+  and entry-point detection.
+- **Structural fingerprint** over dependency-manifest contents + file path/size set,
+  used as a cache key so agents reuse cached understanding instead of rescanning;
+  ordinary in-file edits intentionally do not bust the cache (they are tracked by the
+  session ledger).
+- `kairo_session_start` now scans on first use and returns a compact, cached repo
+  intelligence summary on every resume.
+- New MCP tools `kairo_repo_scan` (cached, `force` to refresh, reports fingerprint
+  change) and `kairo_repo_intel` (cached summary, no scan).
+- `StorageAdapter` extended with intelligence persistence; the redaction boundary
+  also sanitizes intelligence artifacts.
+- Scan is bounded by a file cap and depth and flags `truncated` on very large repos.
+
 ## [0.1.0] - 2026-05-18
 
 ### Added
@@ -33,5 +53,6 @@ All notable changes to Kairo are documented here. The format is based on
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/sandy001-kki/Kairo/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/sandy001-kki/Kairo/releases/tag/v0.1.0

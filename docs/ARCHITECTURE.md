@@ -93,18 +93,18 @@ CHECKPOINT_NOW`. The directive is attached to every tool response.
 
 ## 6. Roadmap (semantic versioning)
 
-| Version   | Scope                                                                                                          |
-| --------- | -------------------------------------------------------------------------------------------------------------- |
-| **0.1.0** | MCP server, event-sourced storage, session/checkpoint/continuation, redaction, pressure model — _this release_ |
-| 0.2.0     | Repository intelligence: fingerprint + framework/dependency/entrypoint detection, cached to kill rescanning    |
-| 0.3.0     | Risk engine + richer cooperative pressure signals; conservatism scales with pressure                           |
-| 0.4.0     | GitHub engine: semantic commits, changelog, release/tag orchestration                                          |
-| 0.5.0     | Flow/graph engine (Mermaid): dependency, module, service, runtime graphs                                       |
-| 0.6.0     | Vector memory + semantic architecture search                                                                   |
-| 0.7.0     | Multi-agent / distributed memory coordination                                                                  |
-| 0.8.0     | Enterprise: telemetry, analytics, team coordination                                                            |
-| 0.9.0     | IDE/dashboard surfaces (VS Code, Cursor, web)                                                                  |
-| 1.0.0     | Stable production release                                                                                      |
+| Version   | Scope                                                                                                                        |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 0.1.0     | MCP server, event-sourced storage, session/checkpoint/continuation, redaction, pressure model                                |
+| **0.2.0** | Repository intelligence: fingerprint + framework/dependency/entrypoint detection, cached to kill rescanning — _this release_ |
+| 0.3.0     | Risk engine + richer cooperative pressure signals; conservatism scales with pressure                                         |
+| 0.4.0     | GitHub engine: semantic commits, changelog, release/tag orchestration                                                        |
+| 0.5.0     | Flow/graph engine (Mermaid): dependency, module, service, runtime graphs                                                     |
+| 0.6.0     | Vector memory + semantic architecture search                                                                                 |
+| 0.7.0     | Multi-agent / distributed memory coordination                                                                                |
+| 0.8.0     | Enterprise: telemetry, analytics, team coordination                                                                          |
+| 0.9.0     | IDE/dashboard surfaces (VS Code, Cursor, web)                                                                                |
+| 1.0.0     | Stable production release                                                                                                    |
 
 Security was deliberately pulled into 0.1.0 rather than a later phase: every checkpoint
 persists potentially secret content from the first write, so the redaction boundary
@@ -120,3 +120,22 @@ cannot be retrofitted safely.
   register in `registerTools()`. Engines depend on the adapter interface only.
 - **New pressure signal**: add to the `PressureSignals` shape and weight it in
   `pressureModel.ts`; no other layer changes.
+- **New framework detector**: add a pure `Detector` to `frameworkDetectors.ts`; it is
+  additive and touches nothing else.
+
+## 8. Repository intelligence (v0.2.0)
+
+`src/core/repo/` scans the project once (bounded by a file cap and depth, flagged
+`truncated` if exceeded) into a `RepoIntelligence` artifact: inventory, language
+breakdown, detected frameworks/dependencies, and entry points.
+
+The **fingerprint** is the cache key. It hashes dependency-manifest _contents_ plus the
+sorted set of file _paths and sizes_ — deliberately **not** every file's full content.
+Rationale: changes that invalidate cached architecture understanding (new dependency,
+new/removed/renamed files) must bust the cache; routine in-file edits must not, because
+those are already tracked precisely by the session ledger. Hashing every byte would
+make the cache useless (it would bust on every keystroke) and slow on large repos.
+
+`kairo_session_start` scans only when no artifact is cached; every resume reuses the
+cache and returns a compact summary. This is the concrete mechanism by which Kairo
+stops agents from re-deriving the repository each session.
