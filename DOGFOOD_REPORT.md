@@ -261,3 +261,51 @@ rescans, and ranking returns real architecture (5/5 first-party, central-module
 top-1) deterministically. The semantic-similarity weakness of the default embedder
 is real and disclosed; it does not block the success condition because Kairo's value
 is _which_ context to surface, and that is salience/structure-driven by design.
+
+---
+
+# Addendum — v0.6.1 Embedding Provider Layer (dogfood)
+
+Compared the **deterministic** provider vs a **simulated** stronger-semantic
+provider (a deterministic stemmed-hash embedder used _in the harness only_ — NOT a
+real model; real hosted-model numbers need a configured endpoint and were not run
+here, by design). Same chunks/edges; per-repo queries.
+
+| Repo  | query                                           | det top-5 FP | det avgSim | sim top-5 FP | sim avgSim | top-1 (both)   |
+| ----- | ----------------------------------------------- | -----------: | ---------: | -----------: | ---------: | -------------- |
+| Kairo | "session continuity checkpoint and risk engine" |          5/5 |      0.034 |          5/5 |      0.195 | `core/session` |
+| zod   | "schema validation parsing and type inference"  |          5/5 |      0.000 |          5/5 |      0.131 | `(repository)` |
+| nest  | "dependency injection modules and providers"    |          5/5 |      0.031 |          5/5 |      0.326 | `core`         |
+
+## Findings
+
+- **Architectural correctness did not regress.** Top-5 first-party stayed **5/5**
+  and the top-3 ordering was **identical** between the two providers on all three
+  repos. The stronger embedder changed the _similarity_ term, not which architecture
+  surfaced — exactly the v0.6.1 success condition.
+- **The similarity term became real signal** (avg ~0.03 → 0.13–0.33), so a better
+  provider does contribute, but it is bounded by the seven structural factors.
+- **Deterministic & provider-switch correct**: both providers reproducible;
+  `embedderId` stamped per provider; switching invalidates the index.
+- **Fail-safe verified by test**: a flaky remote provider falls back to deterministic
+  and stamps the deterministic id (no mixed-vector index); a perfectly-similar
+  peripheral example still loses to a central low-similarity module.
+
+## Honest limitations
+
+- Because structural factors already pick the correct architecture on these queries,
+  the stronger embedder did **not change** the top results here — it strengthened a
+  weak factor without harming correctness. Its value shows on ambiguous/finer-grained
+  queries, which this dogfood does not stress.
+- The "semantic" provider here is a **simulation** (stemmed hash), explicitly not a
+  claim about any model. A real hosted model could _over-associate_ concepts; that
+  risk is documented in ADR-0006 and bounded by the capped similarity weight.
+- No live network/hosted-model validation was performed (no keys/network in CI);
+  this is stated rather than papered over.
+
+## Verdict
+
+v0.6.1 succeeds: semantic embeddings can now strengthen retrieval **without**
+reducing deterministic architectural correctness, and the default stays offline and
+byte-stable. The provider layer is the foundation for v0.7.0+ (semantic routing,
+distributed cognition) with no redesign.

@@ -1,18 +1,14 @@
-import type {
-  EmbeddedChunk,
-  Embedder,
-  RankFactor,
-  RetrievalQuery,
-  RetrievalResult,
-} from '../types.js';
+import type { EmbeddedChunk, RankFactor, RetrievalQuery, RetrievalResult } from '../types.js';
 import type { Checkpoint } from '../../../types/domain.js';
 import { cosine } from '../embedding/deterministicEmbedder.js';
 
 /**
- * Hybrid, explainable retrieval (ADR-0005). Cosine similarity is ONE factor; salience,
- * graph centrality, runtime layer, dependency proximity, recency and checkpoint
- * overlap make it architecture-aware so a central module beats a lexically similar
- * but peripheral example. Deterministic: pure over its inputs, tie-break by id.
+ * Hybrid, explainable retrieval (ADR-0005/0006). Semantic similarity is ONE of eight
+ * weighted factors; salience, graph centrality, runtime, architecture layer,
+ * dependency proximity, recency and checkpoint overlap jointly dominate so a central
+ * module beats a lexically/semantically similar but peripheral example regardless of
+ * embedder. Pure & deterministic: it consumes a precomputed query vector (the async
+ * provider boundary lives in MemoryEngine), tie-break by id.
  */
 export interface RankWeights {
   similarity: number;
@@ -20,6 +16,7 @@ export interface RankWeights {
   graphCentrality: number;
   sessionRecency: number;
   runtimeLayer: number;
+  architectureLayer: number;
   dependencyProximity: number;
   checkpointOverlap: number;
 }
@@ -30,6 +27,7 @@ export const DEFAULT_RANK_WEIGHTS: RankWeights = {
   graphCentrality: 0.7,
   sessionRecency: 0.4,
   runtimeLayer: 0.5,
+  architectureLayer: 0.5,
   dependencyProximity: 0.5,
   checkpointOverlap: 0.6,
 };
@@ -53,15 +51,42 @@ function queryTerms(text: string): Set<string> {
   );
 }
 
+const LAYER: Array<{ re: RegExp; raw: number; name: string }> = [
+  {
+    re: /(^|\/)(api|routes?|controllers?|handlers?|graphql|grpc|http|web|server|pages?|app|cli|cmd)(\/|$)/i,
+    raw: 1.0,
+    name: 'interface',
+  },
+  {
+    re: /(^|\/)(services?|core|domain|usecases?|business|engine|lib)(\/|$)/i,
+    raw: 0.9,
+    name: 'domain',
+  },
+  {
+    re: /(^|\/)(db|data|models?|repositories|store|storage|migrations?|prisma)(\/|$)/i,
+    raw: 0.8,
+    name: 'data',
+  },
+  { re: /(^|\/)(infra|config|deploy|ops|k8s|terraform)(\/|$)/i, raw: 0.6, name: 'infra' },
+];
+
+function architectureLayer(locator: string): { raw: number; note: string } {
+  const p = `/${locator}/`;
+  for (const l of LAYER) if (l.re.test(p)) return { raw: l.raw, note: `layer:${l.name}` };
+  return { raw: 0.3, note: 'layer:unclassified' };
+}
+
+/**
+ * @param queryVector precomputed by the active provider (keeps this fn pure).
+ */
 export function retrieve(
   query: RetrievalQuery,
   chunks: EmbeddedChunk[],
-  embedder: Embedder,
+  queryVector: number[],
   ctx: RankContext = {},
   weights: RankWeights = DEFAULT_RANK_WEIGHTS,
 ): RetrievalResult[] {
   if (chunks.length === 0) return [];
-  const qVec = embedder.embed(query.text);
   const qTerms = queryTerms(query.text);
 
   const maxSal = Math.max(1e-9, ...chunks.map((c) => c.salience));
@@ -80,12 +105,12 @@ export function retrieve(
     : new Set<string>();
 
   const results = chunks.map((c): RetrievalResult => {
-    const similarity = clamp01(Math.max(0, cosine(qVec, c.vector)));
-
+    const similarity = clamp01(Math.max(0, cosine(queryVector, c.vector)));
     const salience = clamp01(c.salience / maxSal);
     const graphCentrality = clamp01(c.graphDegree / maxDeg);
     const sessionRecency = c.ts ? clamp01((Date.parse(c.ts) - oldest) / span) : 0;
     const runtimeLayer = c.runtimeReachable ? 1 : c.kind === 'structural' ? 0.5 : 0.2;
+    const arch = architectureLayer(c.locator);
 
     const hay = `${c.locator} ${c.neighbors.join(' ')} ${c.text}`.toLowerCase();
     let depHits = 0;
@@ -105,14 +130,23 @@ export function retrieve(
       graphCentrality,
       sessionRecency,
       runtimeLayer,
+      architectureLayer: arch.raw,
       dependencyProximity,
       checkpointOverlap,
     };
+    const notes: Partial<Record<keyof RankWeights, string>> = { architectureLayer: arch.note };
     const factors: RankFactor[] = (Object.keys(weights) as Array<keyof RankWeights>)
       .map((name) => {
         const w = weights[name];
         const weighted = Number((raw[name] * w).toFixed(6));
-        return { name, raw: Number(raw[name].toFixed(4)), weight: w, weighted };
+        const note = notes[name];
+        return {
+          name,
+          raw: Number(raw[name].toFixed(4)),
+          weight: w,
+          weighted,
+          ...(note ? { note } : {}),
+        };
       })
       .filter((f) => f.raw !== 0);
 

@@ -130,7 +130,11 @@ describe('hybrid retrieval is architecture-aware', () => {
       runtimeReachable: false,
       neighbors: [],
     });
-    const res = retrieve({ text: 'authentication login session token' }, [auth, example], e);
+    const res = retrieve(
+      { text: 'authentication login session token' },
+      [auth, example],
+      e.embed('authentication login session token'),
+    );
     expect(res[0]!.chunk.id).toBe('struct:mod:auth');
     expect(res[0]!.score).toBeGreaterThan(res[1]!.score);
     // Explainable.
@@ -148,8 +152,8 @@ describe('hybrid retrieval is architecture-aware', () => {
       runtimeReachable: false,
       neighbors: [],
     });
-    const a = retrieve({ text: 'alpha' }, [c], e);
-    const b = retrieve({ text: 'alpha' }, [c], e);
+    const a = retrieve({ text: 'alpha' }, [c], e.embed('alpha'));
+    const b = retrieve({ text: 'alpha' }, [c], e.embed('alpha'));
     expect(a).toEqual(b);
   });
 });

@@ -20,16 +20,31 @@ deterministically — never a blind file dump:
 | `semantic`    | architecture docs (README/ARCHITECTURE/…)                                                               |
 | `session`     | latest checkpoint (task, remaining, blockers, risk)                                                     |
 
-## Embedder (honest scope)
+## Embedding provider layer (v0.6.1, ADR-0006)
 
-`Embedder` is an interface. The default `DeterministicEmbedder` is a pure,
-fixed-256-dim **hashed lexical/structural** vector (token + sub-token + bigram,
-L2-normalised). It is **not deep semantic** similarity, and Kairo says so in the
-tool output. It is the default because it is byte-identical across runs/machines
-(memory must not churn — it seeds long-term recall), needs no network or secrets,
-and Kairo's hybrid ranking carries the architecture awareness. Semantic/hosted
-providers are pluggable behind the same interface (`registerEmbedder`); the embedder
-id is stored with the index so a provider switch invalidates it.
+`src/core/vector/providers/` exposes an `EmbeddingProvider` interface + registry.
+The **default** is `deterministic`: a pure, fixed-256-dim hashed lexical/structural
+vector (token + sub-token + bigram, L2-normalised). It is **not deep-semantic**, and
+Kairo says so. It stays the default because it is byte-identical across
+runs/machines (memory must not churn — it seeds long-term recall), needs no network
+or secrets, and the hybrid ranking carries architecture awareness.
+
+A stronger provider is **opt-in via env only**:
+
+```
+KAIRO_EMBEDDER=openai|voyage|ollama|custom   # default: deterministic
+KAIRO_EMBED_API_KEY=...        # or OPENAI_API_KEY / VOYAGE_API_KEY
+KAIRO_EMBED_BASE_URL=...       # required for custom; presets supply the rest
+KAIRO_EMBED_MODEL=...          KAIRO_EMBED_STYLE=openai|ollama   KAIRO_EMBED_DIM=...
+```
+
+One `HttpEmbeddingProvider` covers every OpenAI-compatible endpoint (OpenAI,
+VoyageAI, LM Studio, vLLM) and Ollama's native shape. The embedder id (incl. model)
+is part of the index key, so switching providers invalidates and rebuilds — never a
+mixed-vector index. If a configured remote provider errors, Kairo **falls back to
+deterministic**, logs it, and stamps the index with the provider actually used: an
+embedding outage cannot break a session. Embedding is async; `retrieve()` stays a
+pure deterministic function by consuming a precomputed query vector.
 
 ## Hybrid, explainable ranking
 
@@ -42,8 +57,14 @@ id is stored with the index so a provider switch invalidates it.
 | graphCentrality     |       0.7 | module-graph degree                        |
 | sessionRecency      |       0.4 | newer session/decision memory              |
 | runtimeLayer        |       0.5 | reachable from a runtime entry point       |
+| architectureLayer   |       0.5 | interface / domain / data / infra role     |
 | dependencyProximity |       0.5 | query-term overlap with chunk + neighbours |
 | checkpointOverlap   |       0.6 | overlaps current checkpoint task/blockers  |
+
+Similarity is **one of eight** factors. Even with a perfect embedder the other seven
+jointly dominate — a test asserts a perfectly-similar peripheral example still loses
+to a central low-similarity module. This is the property a stronger provider cannot
+break.
 
 Because salience/graph/runtime carry real weight, **a central `auth` module
 out-ranks a lexically similar but peripheral `examples/` file even with the weak

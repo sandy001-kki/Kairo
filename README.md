@@ -16,6 +16,14 @@ the next agent an exact continuation brief instead of a blank slate.
 
 ## Status
 
+**v0.6.1 — Embedding provider layer.** The embedder is now pluggable
+(`KAIRO_EMBEDDER=openai|voyage|ollama|custom`) via one OpenAI/Ollama-compatible HTTP
+provider — but `deterministic` stays the default (offline, byte-stable) and a remote
+failure falls back to it. Similarity is one of **eight** weighted factors (added an
+explicit `architectureLayer`); a stronger embedder strengthens recall **without**
+overriding deterministic architectural correctness (dogfood: top-5 first-party 5/5 in
+both arms).
+
 **v0.6.0 — Vector / semantic memory.** Architecture-aware hybrid recall, **not**
 naive RAG. Kairo builds memory chunks (structural / semantic / session / decision /
 operational) from artifacts it already derives, embeds them with a **deterministic

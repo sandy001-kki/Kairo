@@ -6,6 +6,44 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-05-19
+
+Embedding provider layer — a stronger semantic substrate **without** weakening
+deterministic architectural correctness. See
+[ADR-0006](docs/adr/0006-embedding-provider-layer.md).
+
+### Added
+
+- **`src/core/vector/providers/`** — `EmbeddingProvider` interface + registry.
+  `deterministic` stays the default and the only provider used unless `KAIRO_EMBEDDER`
+  selects another (offline, reproducible, CI/test-safe, no network, no secrets).
+- **`HttpEmbeddingProvider`** — one provider covering every OpenAI-compatible endpoint
+  (OpenAI / VoyageAI / LM Studio / vLLM) plus Ollama's native shape; presets for
+  `openai` / `voyage` / `ollama` / `custom` via `KAIRO_EMBED_*` env. Vectors
+  L2-normalised; request timeout; never default; never used in tests/CI.
+- **`architectureLayer`** is now an explicit, explainable ranking factor
+  (interface/domain/data/infra), matching the target retrieval formula.
+
+### Changed
+
+- Embedding is async (`EmbeddingProvider.embed/embedBatch`). `retrieve()` now takes a
+  **precomputed query vector** so it stays a pure, deterministic function; the async
+  provider boundary lives in `MemoryEngine`.
+- A configured remote provider that errors **falls back to deterministic**, logs it,
+  and stamps the index with the provider actually used (no mixed-vector corruption).
+  An embedding outage can never break a session.
+
+### Notes
+
+- Retrieval remains hybrid: similarity is one of **eight** weighted factors. A test
+  asserts a perfectly-similar peripheral example still loses to a central
+  low-similarity module — embeddings can never override architectural correctness.
+- Dogfood (kairo/zod/nest, deterministic vs a simulated stronger-semantic provider):
+  top-5 first-party stayed **5/5 in both arms**; similarity term strengthened
+  (avg 0.03 → 0.20–0.33) with no change to the correct top results. Real hosted-model
+  numbers require a configured endpoint and are out of CI scope — documented honestly,
+  not fabricated.
+
 ## [0.6.0] - 2026-05-19
 
 Vector / semantic memory — architecture-aware hybrid recall, **not** naive RAG. See
@@ -198,7 +236,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/sandy001-kki/Kairo/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/sandy001-kki/Kairo/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/sandy001-kki/Kairo/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/sandy001-kki/Kairo/compare/v0.5.0...v0.5.1

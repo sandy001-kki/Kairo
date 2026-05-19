@@ -261,3 +261,16 @@ Three decisions keep it aligned with Kairo's principles:
 All persistence flows through the redaction boundary. Future (multi-agent/shared
 cognition, evolution timelines, distributed stores) are additional chunk kinds,
 embedder providers, and `VectorStore` adapters behind the same interfaces.
+
+### 13a. Embedding provider layer (v0.6.1, ADR-0006)
+
+`src/core/vector/providers/` makes the embedder pluggable without weakening the
+trust model. `deterministic` stays the default (offline, byte-stable); `openai` /
+`voyage` / `ollama` / `custom` are opt-in via `KAIRO_EMBED_*` env through one
+`HttpEmbeddingProvider`. Embedding became async, so `retrieve()` was refactored to
+consume a **precomputed query vector** — it stays a pure, deterministic, auditable
+function and the "never embedding-only" invariant is structurally enforced
+(similarity is 1 of 8 weighted factors; `architectureLayer` was added as an explicit
+term). Remote-provider failure falls back to deterministic and stamps the index with
+the provider actually used, so an embedding outage never breaks a session and a
+remote-labelled index never holds fallback vectors.
