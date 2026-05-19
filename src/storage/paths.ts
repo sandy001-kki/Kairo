@@ -14,11 +14,13 @@ export interface KairoPaths {
   continuationsDir: string;
   reportsDir: string;
   intelligenceDir: string;
+  graphsDir: string;
   sessionFile: (id: string) => string;
   checkpointFile: (id: string) => string;
   continuationFile: (name: string) => string;
   intelligenceFile: (fingerprint: string) => string;
   latestIntelligenceFile: string;
+  graphFile: (kind: string) => string;
 }
 
 export function resolveProjectRoot(explicit?: string): string {
@@ -38,10 +40,12 @@ export function kairoPaths(explicitRoot?: string): KairoPaths {
     continuationsDir: join(base, 'continuations'),
     reportsDir: join(base, 'reports'),
     intelligenceDir: join(base, 'intelligence'),
+    graphsDir: join(base, 'graphs'),
     sessionFile: (id) => join(base, 'sessions', `${id}.json`),
     checkpointFile: (id) => join(base, 'checkpoints', `${id}.json`),
     continuationFile: (name) => join(base, 'continuations', name),
     intelligenceFile: (fp) => join(base, 'intelligence', `${fp}.json`),
     latestIntelligenceFile: join(base, 'intelligence', 'latest.json'),
+    graphFile: (kind) => join(base, 'graphs', `${kind}.md`),
   };
 }

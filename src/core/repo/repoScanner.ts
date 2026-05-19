@@ -1,10 +1,21 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, relative, extname, sep } from 'node:path';
 import type { EntryPoint, LanguageBreakdown, RepoIntelligence, RepoInventory } from './types.js';
+import { INTELLIGENCE_SCHEMA } from './types.js';
 import { detectFrameworks, type ManifestSet } from './frameworkDetectors.js';
 import { computeFingerprint } from './fingerprint.js';
+import {
+  extractImports,
+  importLangForExt,
+  resolveModuleEdges,
+  type RawImport,
+} from '../graph/imports.js';
+import { buildModuleGraph } from '../graph/moduleGraph.js';
 import type { Clock } from '../../utils/time.js';
 import { logger } from '../../utils/logger.js';
+
+const MAX_PARSE_BYTES = 256 * 1024;
+const MAX_PARSED_FILES = 6000;
 
 const IGNORED_DIRS = new Set([
   'node_modules',
@@ -92,6 +103,9 @@ export class RepoScanner {
     const manifestContents: Record<string, string> = {};
     const topLevelDirs = new Set<string>();
     const ciWorkflows: string[] = [];
+    const sourceFiles = new Set<string>();
+    const rawImports: RawImport[] = [];
+    let parsedFiles = 0;
     let totalFiles = 0;
     let totalBytes = 0;
     let truncated = false;
@@ -141,6 +155,22 @@ export class RepoScanner {
               /* ignore unreadable manifest */
             }
           }
+
+          const importLang = importLangForExt(ext);
+          if (importLang) {
+            sourceFiles.add(rel);
+            if (parsedFiles < MAX_PARSED_FILES && size <= MAX_PARSE_BYTES) {
+              parsedFiles += 1;
+              try {
+                const text = await readFile(abs, 'utf8');
+                for (const spec of extractImports(importLang, text)) {
+                  rawImports.push({ from: rel, spec, lang: importLang });
+                }
+              } catch {
+                /* unreadable source: still counted as a node */
+              }
+            }
+          }
         }
       }
     };
@@ -163,8 +193,15 @@ export class RepoScanner {
     const entryPoints = this.detectEntryPoints(manifestContents, manifestSet.paths);
     const fingerprint = computeFingerprint({ manifestContents, pathSizeEntries });
 
+    const fileEdges = resolveModuleEdges(sourceFiles, rawImports);
+    const moduleGraph = buildModuleGraph(fileEdges, [...sourceFiles].sort());
+    if (parsedFiles >= MAX_PARSED_FILES) {
+      moduleGraph.truncated = true;
+      logger.warn(`Module-graph parse cap (${MAX_PARSED_FILES}) hit; graph is partial`);
+    }
+
     return {
-      schema: 1,
+      schema: INTELLIGENCE_SCHEMA,
       fingerprint,
       generatedAt: this.clock.iso(),
       projectRoot,
@@ -174,6 +211,7 @@ export class RepoScanner {
       entryPoints,
       manifests: Object.keys(manifestContents).sort(),
       ciWorkflows: ciWorkflows.sort(),
+      moduleGraph,
     };
   }
 

@@ -508,4 +508,39 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
       }
     },
   );
+
+  // ── Flow / graph engine (v0.5.0) ─────────────────────────────────────────
+
+  server.registerTool(
+    'kairo_graph',
+    {
+      title: 'Render a repository graph as Mermaid',
+      description:
+        'Return a Mermaid diagram derived from cached repo intelligence (no rescan): ' +
+        '"module" (collapsed internal import graph), "service", "architecture", or ' +
+        '"pipeline". Mirrors are also written to .kairo/graphs/.',
+      inputSchema: {
+        kind: z.enum(['module', 'service', 'architecture', 'pipeline']).optional(),
+      },
+    },
+    async ({ kind }) => {
+      try {
+        const result = await sessions.graph(kind ?? 'module');
+        if (!result) {
+          return ok('No repo intelligence cached yet. Call kairo_repo_scan first.', {
+            found: false,
+          });
+        }
+        return ok(result.markdown, {
+          found: true,
+          kind: result.graph.kind,
+          nodes: result.graph.nodes.length,
+          edges: result.graph.edges.length,
+          truncated: result.graph.truncated,
+        });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
 }

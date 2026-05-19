@@ -6,6 +6,31 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-19
+
+### Added
+
+- **Flow / graph engine.** Mermaid graphs derived from repo intelligence:
+  - `kairo_graph` tool returns `module` / `service` / `architecture` / `pipeline`
+    as Mermaid (no rescan); mirrors written to `.kairo/graphs/*.md` on every scan.
+  - **Module dependency graph** from real, bounded import extraction added to the
+    scanner (regex static `import`/`require`/`from`, JS/TS + Python; resolves the
+    NodeNext `.js`→`.ts` convention; relative/internal edges only — bare and
+    dynamic imports excluded by design and documented as such).
+  - Graphs are **collapsed to directory granularity and node-capped**: too many
+    nodes auto-collapse one level shallower, then keep the highest-degree nodes and
+    flag `truncated` — a readable graph, not a hairball.
+  - Service / architecture / pipeline graphs are pure derivations of cached
+    intelligence (frameworks, dirs, CI), each annotated as heuristic.
+
+### Changed
+
+- Repo-intelligence artifact schema bumped to **2** (now embeds the module graph).
+  Caches from an older schema are ignored and regenerated automatically — no manual
+  cache clearing.
+- `kairo_session_start` summary now reports module-graph size and points to
+  `.kairo/graphs/`. The redaction boundary also sanitizes graph mirrors.
+
 ## [0.4.0] - 2026-05-19
 
 ### Added
@@ -94,7 +119,8 @@ All notable changes to Kairo are documented here. The format is based on
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/sandy001-kki/Kairo/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/sandy001-kki/Kairo/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/sandy001-kki/Kairo/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/sandy001-kki/Kairo/compare/v0.1.0...v0.2.0

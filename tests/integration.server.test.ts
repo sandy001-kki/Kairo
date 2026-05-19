@@ -75,6 +75,7 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
         'kairo_commit_message',
         'kairo_changelog',
         'kairo_release_plan',
+        'kairo_graph',
       ]),
     );
   });
@@ -119,6 +120,12 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
     const release = await client.callTool({ name: 'kairo_release_plan', arguments: {} });
     expect(textOf(release)).toMatch(/→ \d+\.\d+\.\d+ \((major|minor|patch)\), tag v/);
 
+    const graph = await client.callTool({
+      name: 'kairo_graph',
+      arguments: { kind: 'architecture' },
+    });
+    expect(textOf(graph)).toContain('flowchart TD');
+
     const cp = await client.callTool({
       name: 'kairo_checkpoint',
       arguments: { reason: 'manual', completed: ['charge path'] },
@@ -141,8 +148,12 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
     expect((await readdir(join(base, 'continuations'))).some((f) => f.endsWith('.md'))).toBe(true);
     const intel = JSON.parse(await readFile(join(base, 'intelligence', 'latest.json'), 'utf8')) as {
       frameworks: Array<{ id: string }>;
+      schema: number;
     };
     expect(intel.frameworks.map((f) => f.id)).toContain('express');
+    expect(intel.schema).toBe(2);
+    const moduleGraphMd = await readFile(join(base, 'graphs', 'module.md'), 'utf8');
+    expect(moduleGraphMd).toContain('```mermaid');
   });
 
   it('a fresh client resumes with the prior continuation brief (anti-rescan)', async () => {

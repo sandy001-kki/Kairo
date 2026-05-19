@@ -31,6 +31,7 @@ export class FileStorageAdapter implements StorageAdapter {
       this.paths.continuationsDir,
       this.paths.reportsDir,
       this.paths.intelligenceDir,
+      this.paths.graphsDir,
     ]) {
       await mkdir(dir, { recursive: true });
     }
@@ -115,6 +116,10 @@ export class FileStorageAdapter implements StorageAdapter {
 
   async loadIntelligenceByFingerprint(fp: string): Promise<RepoIntelligence | undefined> {
     return this.readJson<RepoIntelligence>(this.paths.intelligenceFile(fp));
+  }
+
+  async saveGraph(kind: string, markdown: string): Promise<void> {
+    await this.writeAtomic(this.paths.graphFile(kind), markdown);
   }
 
   async audit(entry: AuditEntry): Promise<void> {

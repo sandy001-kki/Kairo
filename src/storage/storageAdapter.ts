@@ -33,6 +33,9 @@ export interface StorageAdapter {
   loadLatestIntelligence(): Promise<RepoIntelligence | undefined>;
   loadIntelligenceByFingerprint(fingerprint: string): Promise<RepoIntelligence | undefined>;
 
+  /** Persist a rendered graph markdown mirror under `.kairo/graphs/<kind>.md`. */
+  saveGraph(kind: string, markdown: string): Promise<void>;
+
   /** Append an audit record. Never contains secret values. */
   audit(entry: AuditEntry): Promise<void>;
 }

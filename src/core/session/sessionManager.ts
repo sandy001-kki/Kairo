@@ -29,6 +29,10 @@ import type {
 } from '../github/types.js';
 import { RepoScanner } from '../repo/repoScanner.js';
 import type { RepoIntelligence } from '../repo/types.js';
+import { INTELLIGENCE_SCHEMA } from '../repo/types.js';
+import { buildGraph, buildAllGraphs, GRAPH_KINDS } from '../graph/graphEngine.js';
+import { renderGraphMarkdown } from '../graph/mermaid.js';
+import type { GraphKind, RepoGraph } from '../graph/types.js';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Clock } from '../../utils/time.js';
@@ -113,12 +117,13 @@ export class SessionManager {
     }
 
     // Anti-rescan core: reuse cached repo intelligence if present; only scan when
-    // none exists yet (first-ever session for this repo). Keeps resume cheap.
-    let intelligence = await this.adapter.loadLatestIntelligence();
+    // none exists yet (or the cache predates the current schema). Keeps resume cheap.
+    let intelligence = await this.loadValidIntelligence();
     let intelligenceFromCache = true;
     if (!intelligence) {
       intelligence = await this.scanner.scan(args.projectRoot);
       await this.adapter.saveIntelligence(intelligence);
+      await this.persistGraphs(intelligence);
       intelligenceFromCache = false;
     }
 
@@ -322,28 +327,53 @@ export class SessionManager {
     return this.adapter.loadLatestContinuation();
   }
 
-  /** Cached repo intelligence, if any (no scan). */
+  /** Cached repo intelligence (schema-valid only), if any (no scan). */
   getIntelligence(): Promise<RepoIntelligence | undefined> {
-    return this.adapter.loadLatestIntelligence();
+    return this.loadValidIntelligence();
+  }
+
+  /** Render a requested graph from cached intelligence (no scan). */
+  async graph(kind: GraphKind): Promise<{ graph: RepoGraph; markdown: string } | undefined> {
+    const intel = await this.loadValidIntelligence();
+    if (!intel) return undefined;
+    const graph = buildGraph(intel, kind);
+    return { graph, markdown: renderGraphMarkdown(graph) };
   }
 
   /**
    * Scan (or reuse) repo intelligence. With `force`, always rescans and persists.
    * Without it, returns the cached artifact when present — that is the whole point:
-   * agents stop re-deriving repo understanding every session.
+   * agents stop re-deriving repo understanding every session. A cache from an older
+   * artifact schema is treated as absent so new fields (e.g. the graph) are filled.
    */
   async scanRepo(
     projectRoot: string,
     force = false,
   ): Promise<{ intelligence: RepoIntelligence; fromCache: boolean; changed: boolean }> {
-    const cached = await this.adapter.loadLatestIntelligence();
+    const cached = await this.loadValidIntelligence();
     if (cached && !force) {
       return { intelligence: cached, fromCache: true, changed: false };
     }
     const intelligence = await this.scanner.scan(projectRoot);
     const changed = !cached || cached.fingerprint !== intelligence.fingerprint;
     await this.adapter.saveIntelligence(intelligence);
+    await this.persistGraphs(intelligence);
     return { intelligence, fromCache: false, changed };
+  }
+
+  /** Load cached intelligence, ignoring caches written by an older artifact schema. */
+  private async loadValidIntelligence(): Promise<RepoIntelligence | undefined> {
+    const intel = await this.adapter.loadLatestIntelligence();
+    if (!intel || intel.schema !== INTELLIGENCE_SCHEMA) return undefined;
+    return intel;
+  }
+
+  /** Write the rendered Mermaid mirrors under `.kairo/graphs/` (best-effort). */
+  private async persistGraphs(intel: RepoIntelligence): Promise<void> {
+    const all = buildAllGraphs(intel);
+    for (const kind of GRAPH_KINDS) {
+      await this.adapter.saveGraph(kind, renderGraphMarkdown(all[kind]));
+    }
   }
 
   async priorSessions(): Promise<SessionState[]> {

@@ -7,7 +7,9 @@ export const CONTINUITY_PROMPT_TEXT = `You are working through Kairo, a persiste
 
 1. START: Call \`kairo_session_start\` with the agent name and the task. Kairo returns a
    continuation brief from prior work — READ IT and resume from it. Do NOT rescan the
-   whole repository; inspect only the files the brief lists unless they prove insufficient.
+   whole repository; inspect only the files the brief lists unless they prove
+   insufficient. For structure, call \`kairo_graph\` (module/service/architecture/
+   pipeline) instead of walking the tree yourself.
 
 2. WORK: As you make changes, call \`kairo_record\`:
    - kind:"file" for each file you change (Kairo infers risk if you omit it)

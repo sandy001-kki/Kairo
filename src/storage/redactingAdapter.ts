@@ -75,6 +75,12 @@ export function withRedaction(inner: StorageAdapter, clock: Clock): StorageAdapt
     loadLatestIntelligence: () => inner.loadLatestIntelligence(),
     loadIntelligenceByFingerprint: (fp) => inner.loadIntelligenceByFingerprint(fp),
 
+    async saveGraph(kind: string, markdown: string): Promise<void> {
+      const { value, findings } = sanitize(markdown);
+      await inner.saveGraph(kind, value);
+      await auditFindings('graph', findings);
+    },
+
     // Audit entries are constructed internally and never carry secret values.
     audit: (entry: AuditEntry) => inner.audit(entry),
   };

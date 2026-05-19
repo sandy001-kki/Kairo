@@ -16,6 +16,13 @@ the next agent an exact continuation brief instead of a blank slate.
 
 ## Status
 
+**v0.5.0 — Flow / graph engine.** Add Kairo to a repo and you immediately get
+Mermaid graphs from its intelligence: a **module dependency graph** (real import
+edges, collapsed to readable directory granularity and node-capped), plus derived
+**service**, **architecture**, and **pipeline** graphs. `kairo_graph` returns them on
+demand; mirrors are written to `.kairo/graphs/*.md` on every scan. Import extraction
+is honest about scope (static JS/TS + Python, internal edges only).
+
 **v0.4.0 — GitHub engine (advisory).** Kairo turns its session memory into a
 Conventional-Commits message, a Keep-a-Changelog fragment, and a release plan
 (semver bump + tag + notes), and reads git state read-only. By deliberate design
@@ -108,7 +115,7 @@ default; commit it deliberately if you want shared team memory.
 3. When Kairo returns `CHECKPOINT_NOW`, call `kairo_checkpoint`.
 4. `kairo_session_end` writes the final checkpoint and continuation brief.
 
-## MCP surface (v0.4.0)
+## MCP surface (v0.5.0)
 
 | Tool                   | Purpose                                                              |
 | ---------------------- | -------------------------------------------------------------------- |
@@ -126,6 +133,7 @@ default; commit it deliberately if you want shared team memory.
 | `kairo_commit_message` | Conventional-Commits message from session memory (no commit)         |
 | `kairo_changelog`      | Keep-a-Changelog fragment from the session (no file edit)            |
 | `kairo_release_plan`   | Semver bump + tag + release notes proposal (no tag/push)             |
+| `kairo_graph`          | Mermaid module/service/architecture/pipeline graph (no rescan)       |
 
 Resources: `kairo://session/current`, `kairo://checkpoint/latest`.
 Prompt: `kairo_continuity` (the cooperation contract for agents).

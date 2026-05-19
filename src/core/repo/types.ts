@@ -6,6 +6,8 @@
  * result while the fingerprint is unchanged.
  */
 
+import type { RepoGraph } from '../graph/types.js';
+
 export type Confidence = 'high' | 'medium' | 'low';
 
 export interface DetectedFramework {
@@ -43,8 +45,11 @@ export interface RepoInventory {
   truncated: boolean;
 }
 
+/** Bump when the cached artifact shape changes; older caches are then ignored. */
+export const INTELLIGENCE_SCHEMA = 2;
+
 export interface RepoIntelligence {
-  schema: 1;
+  schema: typeof INTELLIGENCE_SCHEMA;
   /** Structural + dependency fingerprint; cache key. */
   fingerprint: string;
   generatedAt: string;
@@ -57,4 +62,6 @@ export interface RepoIntelligence {
   manifests: string[];
   /** Detected CI workflow files, if any. */
   ciWorkflows: string[];
+  /** Collapsed internal module dependency graph (v0.5.0). */
+  moduleGraph: RepoGraph;
 }

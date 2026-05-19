@@ -98,8 +98,8 @@ CHECKPOINT_NOW`. The directive is attached to every tool response.
 | 0.1.0     | MCP server, event-sourced storage, session/checkpoint/continuation, redaction, pressure model               |
 | 0.2.0     | Repository intelligence: fingerprint + framework/dependency/entrypoint detection, cached to kill rescanning |
 | 0.3.0     | Risk engine + richer cooperative pressure signals; conservatism scales with pressure                        |
-| **0.4.0** | GitHub engine (advisory): memory-informed commits, changelog, release plan — _this release_                 |
-| 0.5.0     | Flow/graph engine (Mermaid): dependency, module, service, runtime graphs                                    |
+| 0.4.0     | GitHub engine (advisory): memory-informed commits, changelog, release plan                                  |
+| **0.5.0** | Flow/graph engine (Mermaid): module dependency + service/architecture/pipeline — _this release_             |
 | 0.6.0     | Vector memory + semantic architecture search                                                                |
 | 0.7.0     | Multi-agent / distributed memory coordination                                                               |
 | 0.8.0     | Enterprise: telemetry, analytics, team coordination                                                         |
@@ -180,3 +180,28 @@ and unit-testable, and means the commit/changelog/release text reflects the
 **decisions and risk Kairo recorded** — information a diff-only tool cannot see. The
 release planner encodes the pre-1.0 semver convention (a breaking change bumps MINOR,
 not MAJOR, until 1.0.0) explicitly in its reasoning output rather than silently.
+
+## 11. Flow / graph engine (v0.5.0)
+
+`src/core/graph/` turns repo intelligence into Mermaid diagrams. The hard part is
+the **module dependency graph**, which needs real edges — so the scanner now does
+bounded import extraction (regex over static `import`/`require`/`from`, JS/TS +
+Python; resolves the NodeNext `.js`→`.ts` convention; relative/internal edges only).
+This is honest about its limits: dynamic and bare-package imports are excluded by
+design because they do not improve a directory-level graph and would add noise.
+
+Two design decisions make the graph actually usable rather than a demo:
+
+1. **Collapse + cap.** File-level edges are collapsed to directory granularity. If
+   that still exceeds the node cap, the engine auto-collapses one level shallower,
+   then keeps the highest-degree nodes and flags `truncated`. A graph nobody can
+   read has no value; a smaller honest one does.
+2. **Module graph is cached; the rest are derived.** Only the module graph required
+   scanning, so it is embedded in the intelligence artifact. Service, architecture,
+   and pipeline graphs are pure projections of existing intelligence — no rescans.
+
+Because the artifact shape changed, `INTELLIGENCE_SCHEMA` was bumped to 2 and
+`SessionManager` treats any cache from an older schema as absent, regenerating it.
+This is the general mechanism for evolving the cached artifact without manual cache
+clearing. Rendered Mermaid mirrors are written to `.kairo/graphs/*.md` through the
+redaction boundary like every other artifact.

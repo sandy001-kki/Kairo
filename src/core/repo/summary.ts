@@ -27,5 +27,11 @@ export function summarizeIntelligence(intel: RepoIntelligence): string {
   if (intel.ciWorkflows.length > 0) {
     lines.push(`- CI: ${intel.ciWorkflows.join(', ')}`);
   }
+  const g = intel.moduleGraph;
+  lines.push(
+    `- Module graph: ${g.nodes.length} nodes / ${g.edges.length} edges` +
+      `${g.truncated ? ' (partial)' : ''} — Mermaid mirrors in .kairo/graphs/; ` +
+      `call kairo_graph for module|service|architecture|pipeline.`,
+  );
   return lines.join('\n');
 }
