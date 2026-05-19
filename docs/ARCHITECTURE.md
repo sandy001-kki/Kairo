@@ -200,8 +200,34 @@ Two design decisions make the graph actually usable rather than a demo:
    scanning, so it is embedded in the intelligence artifact. Service, architecture,
    and pipeline graphs are pure projections of existing intelligence — no rescans.
 
-Because the artifact shape changed, `INTELLIGENCE_SCHEMA` was bumped to 2 and
+Because the artifact shape changed, `INTELLIGENCE_SCHEMA` is bumped on each change and
 `SessionManager` treats any cache from an older schema as absent, regenerating it.
 This is the general mechanism for evolving the cached artifact without manual cache
 clearing. Rendered Mermaid mirrors are written to `.kairo/graphs/*.md` through the
 redaction boundary like every other artifact.
+
+## 12. Salience engine (v0.5.2)
+
+`src/core/salience/` is a standalone, reusable ranking subsystem — **not**
+graph-specific (ADR-0004, [SALIENCE_ENGINE.md](SALIENCE_ENGINE.md)). It scores any
+path-bearing item by a weighted sum of independent, pure signals (positive: fan-in,
+import-degree, execution-path, entrypoint/source-root proximity, framework-critical
+dir, workspace ownership; negative penalties: non-production / test / generated
+areas). Penalties are weighted evidence, not a blacklist — a strong dependency centre
+can still out-rank peripheral first-party code.
+
+It exists because the v0.5.0 dogfood proved naïve degree-only truncation buried real
+architecture under examples/docs/sample apps, and vector memory (v0.6.0) must not
+embed weak structural signal. Repo-type **profiles** (`library`/`application`/
+`monorepo`/`generic`, inferred from intelligence) re-weight signals via multipliers.
+Output is deterministic and byte-stable (pure signals, fixed precision, total order
+`score desc, id asc`) because the ranking is cached and will seed embeddings, and
+every score is explainable via per-signal contributions.
+
+The module graph is the first consumer: on truncation it ranks group nodes by
+salience instead of degree. A subtlety found while testing: src-aware grouping strips
+`sample/`/`examples/` prefixes from labels, so the engine scores each group's
+**representative original path**, not its label — otherwise penalty signals would be
+blind to the noise they target. Future consumers (vector memory, semantic search,
+checkpoint compression, continuation prioritisation) reuse the same subsystem rather
+than re-deriving importance.

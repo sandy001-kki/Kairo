@@ -151,7 +151,7 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
       schema: number;
     };
     expect(intel.frameworks.map((f) => f.id)).toContain('express');
-    expect(intel.schema).toBe(3);
+    expect(intel.schema).toBe(4);
     const moduleGraphMd = await readFile(join(base, 'graphs', 'module.md'), 'utf8');
     expect(moduleGraphMd).toContain('```mermaid');
   });

@@ -11,6 +11,12 @@ import {
   type RawImport,
 } from '../graph/imports.js';
 import { buildModuleGraph } from '../graph/moduleGraph.js';
+import {
+  inferProfile,
+  resolveConfig,
+  workspacePrefixes,
+  CRITICAL_DIRS,
+} from '../salience/config.js';
 import type { Clock } from '../../utils/time.js';
 import { logger } from '../../utils/logger.js';
 
@@ -204,7 +210,21 @@ export class RepoScanner {
     const fingerprint = computeFingerprint({ manifestContents, pathSizeEntries });
 
     const fileEdges = resolveModuleEdges(sourceFiles, rawImports);
-    const moduleGraph = buildModuleGraph(fileEdges, [...sourceFiles].sort());
+    const profile = inferProfile({
+      topLevelDirs: [...topLevelDirs],
+      frameworkCategories: frameworks.map((f) => f.category),
+    });
+    const salience = {
+      context: {
+        sourceRoots: ['src', 'lib', 'app', 'sources', 'packages', 'apps', 'libs'],
+        entryPoints: entryPoints.map((e) => e.path),
+        workspaceGlobs: workspacePrefixes(manifestContents['package.json']),
+        frameworkDirs: [...CRITICAL_DIRS],
+        profile,
+      },
+      config: resolveConfig(profile),
+    };
+    const moduleGraph = buildModuleGraph(fileEdges, [...sourceFiles].sort(), { salience });
     if (parsedFiles >= MAX_PARSED_FILES) {
       moduleGraph.truncated = true;
       logger.warn(`Module-graph parse cap (${MAX_PARSED_FILES}) hit; graph is partial`);

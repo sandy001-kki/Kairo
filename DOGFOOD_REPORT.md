@@ -153,3 +153,46 @@ re-validated on all three repos, and covered by regression tests (62 passing).
 File-level extraction, caching, invalidation, truncation honesty, and performance are
 sound. The documented limitations are salience/ranking issues, not correctness — safe
 to proceed to v0.6.0 with improvement #1 prioritised.
+
+---
+
+# Addendum — v0.5.2 Salience-aware truncation (re-validation)
+
+Improvement #1 from this report (node salience ranking) was implemented as the
+reusable salience subsystem ([SALIENCE_ENGINE.md](docs/SALIENCE_ENGINE.md),
+[ADR-0004](docs/adr/0004-reusable-salience-subsystem.md)) and re-validated against
+the same three repos by building the module graph two ways on identical
+file-level edges: degree-only (old) vs salience-ranked (new).
+
+**Truncation quality = first-party kept nodes / total kept** (higher is better):
+
+| Repo     | cap | degree-only | salience | Δ                                     |
+| -------- | --: | ----------: | -------: | ------------------------------------- |
+| Kairo    |  25 |        0.94 |     0.94 | inert (not truncated — no regression) |
+| zod      |  25 |        0.57 |     0.57 | inert (≤ cap, no truncation pressure) |
+| **nest** |  25 |    **0.72** | **0.96** | **+0.24**                             |
+| Kairo    |  12 |        0.91 |     0.91 | inert (barely truncated)              |
+| **zod**  |  12 |    **0.75** | **1.00** | **+0.25**                             |
+| **nest** |  12 |    **0.67** | **1.00** | **+0.33**                             |
+
+Findings:
+
+- **Where truncation engages (messy/large monorepos), salience is decisive**: nest
+  and zod reach a 1.00 first-party ratio under pressure — sample apps, docs sites,
+  fixtures are demoted below real architecture without a hard blacklist.
+- **Where truncation does not engage, salience is provably inert** — identical
+  output, so there is no regression on clean/small repos.
+- **Deterministic**: repeated runs produced byte-identical rankings (required —
+  this seeds vector memory).
+- A real integration bug was caught while writing the tests: src-aware grouping
+  strips `sample/`/`examples/` from labels, so salience now scores each group's
+  _representative original path_, not the label.
+
+Validated repo classes: large monorepo (nest), nested-`src` (Kairo), monorepo +
+Next.js app-router/docs noise (zod). The earlier "Next.js app-router noise" and
+"example-heavy monorepo" limitations are now mitigated by salience whenever the
+graph is truncated.
+
+**Conclusion:** structural-signal quality is now strong, honest, deterministic, and
+explainable. v0.5.x is stable. Safe to start **v0.6.0 Vector Memory**, which should
+weight embeddings by this salience subsystem rather than re-deriving importance.

@@ -48,7 +48,7 @@ export interface RepoInventory {
 }
 
 /** Bump when the cached artifact shape changes; older caches are then ignored. */
-export const INTELLIGENCE_SCHEMA = 3;
+export const INTELLIGENCE_SCHEMA = 4;
 
 export interface RepoIntelligence {
   schema: typeof INTELLIGENCE_SCHEMA;

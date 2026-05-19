@@ -6,6 +6,32 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-05-19
+
+Salience-aware graph ranking, prerequisite for v0.6.0 vector memory (embedding weak
+structural signal is long-term memory corruption). See
+[SALIENCE_ENGINE.md](docs/SALIENCE_ENGINE.md) and
+[ADR-0004](docs/adr/0004-reusable-salience-subsystem.md).
+
+### Added
+
+- **Salience subsystem** (`src/core/salience/`) — a reusable, composable,
+  explainable, deterministic ranking engine, **not** graph-specific. Weighted
+  independent signals (fan-in, import-degree, execution-path, entrypoint/source-root
+  proximity, framework-critical dir, workspace ownership; penalty signals for
+  non-production / test / generated areas). Repo-type profiles
+  (library/application/monorepo/generic) re-weight via multipliers; per-call weight
+  overrides; per-signal explanations. Penalties are weighted evidence, not a
+  blacklist (a strong dependency centre in `examples/` can still rank).
+- Module-graph truncation now keeps the most architecturally salient groups instead
+  of merely the highest-degree ones; scores each group's representative original
+  path so `sample/`/`examples/` prefixes stripped by grouping are still penalised.
+
+### Changed
+
+- `INTELLIGENCE_SCHEMA` 3 → 4 (module-graph node selection changed); older caches
+  auto-regenerate.
+
 ## [0.5.1] - 2026-05-19
 
 Patch from a structured dogfood of v0.5.0 against three real repos (Kairo, zod,
@@ -142,7 +168,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/sandy001-kki/Kairo/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/sandy001-kki/Kairo/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/sandy001-kki/Kairo/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/sandy001-kki/Kairo/compare/v0.3.0...v0.4.0
