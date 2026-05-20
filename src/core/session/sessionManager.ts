@@ -56,6 +56,26 @@ import type {
   RiskReport,
   TeamActivity,
 } from '../telemetry/types.js';
+import {
+  buildSessionToWorker,
+  queryEvents,
+  timeline,
+  checkpointLineage,
+  conflictHistory,
+  retrievalTrace,
+  whyEvent,
+} from '../query/queryEngine.js';
+import type {
+  CausalityResult,
+  ConflictEntry,
+  EventFilter,
+  LineageNode,
+  RetrievalTrace,
+  TimelineEntry,
+  TimelineKind,
+  UnifiedEvent,
+} from '../query/types.js';
+import type { QueryInputs } from '../query/queryEngine.js';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Clock } from '../../utils/time.js';
@@ -664,6 +684,41 @@ export class SessionManager {
       exportEnabled: resolveExporter() !== undefined,
       network: false,
     };
+  }
+
+  // ── Historical introspection (v0.8.1, ADR-0009) ─────────────────────────
+
+  private async queryInputs(): Promise<QueryInputs> {
+    const [events, telemetry, audit] = await Promise.all([
+      this.adapter.readEvents(),
+      this.adapter.readTelemetry(),
+      this.adapter.readAudit(),
+    ]);
+    return { events, telemetry, audit, sessionToWorker: buildSessionToWorker(events) };
+  }
+
+  async queryEvents(filter: Omit<EventFilter, 'callerNamespace'> = {}): Promise<UnifiedEvent[]> {
+    return queryEvents({ ...filter, callerNamespace: this.namespace }, await this.queryInputs());
+  }
+
+  async timelineQuery(kind: TimelineKind): Promise<TimelineEntry[]> {
+    return timeline(kind, await this.queryInputs(), this.namespace);
+  }
+
+  async checkpointLineage(id: string): Promise<LineageNode[]> {
+    return checkpointLineage(id, (cid) => this.adapter.loadCheckpoint(cid));
+  }
+
+  async conflictHistory(): Promise<ConflictEntry[]> {
+    return conflictHistory(await this.queryInputs(), this.namespace);
+  }
+
+  async retrievalTrace(eventId: string): Promise<RetrievalTrace | undefined> {
+    return retrievalTrace(eventId, await this.queryInputs(), this.namespace);
+  }
+
+  async whyEvent(eventId: string): Promise<CausalityResult | undefined> {
+    return whyEvent(eventId, await this.queryInputs(), this.namespace);
   }
 
   /** Augment a checkpoint with owning worker + parent checkpoint (the DAG link). */

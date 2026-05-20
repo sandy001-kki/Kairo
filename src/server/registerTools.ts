@@ -896,4 +896,168 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
       }
     },
   );
+
+  // ── Historical introspection (v0.8.1) ────────────────────────────────────
+
+  const TIMELINE_KINDS = [
+    'sessions',
+    'checkpoints',
+    'lease-conflicts',
+    'retrievals',
+    'memory-refresh',
+  ] as const;
+  const EVENT_SOURCES = ['event', 'telemetry', 'audit'] as const;
+
+  server.registerTool(
+    'kairo_query_events',
+    {
+      title: 'Query historical events',
+      description:
+        'Deterministic, replay-safe filter over the unified event + telemetry + audit ' +
+        'streams. Namespace-safe (private memory of other workers is filtered).',
+      inputSchema: {
+        sources: z.array(z.enum(EVENT_SOURCES)).optional(),
+        kinds: z.array(z.string()).optional().describe('Exact kind, or prefix*.'),
+        sessionIds: z.array(z.string()).optional(),
+        workers: z.array(z.string()).optional(),
+        since: z.string().optional(),
+        until: z.string().optional(),
+        limit: z.number().int().min(0).max(1000).optional(),
+      },
+    },
+    async (args) => {
+      try {
+        const out = await sessions.queryEvents(args);
+        return ok(
+          `${out.length} event(s):\n` +
+            out
+              .slice(0, 20)
+              .map((e) => `${e.ts}  [${e.source}/${e.kind}]  ${e.worker ?? '-'}  ${e.sessionId}`)
+              .join('\n'),
+          { count: out.length, events: out },
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_timeline_query',
+    {
+      title: 'Engineering timeline',
+      description:
+        'Deterministic timeline view: sessions, checkpoints, lease conflicts, retrievals, ' +
+        'or memory refreshes. Namespace-safe.',
+      inputSchema: { kind: z.enum(TIMELINE_KINDS) },
+    },
+    async ({ kind }) => {
+      try {
+        const out = await sessions.timelineQuery(kind);
+        return ok(
+          out.map((e) => `${e.ts}  [${e.worker ?? '-'}]  ${e.summary}`).join('\n') ||
+            `(no ${kind} yet)`,
+          { count: out.length, entries: out },
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_checkpoint_lineage',
+    {
+      title: 'Checkpoint lineage (DAG path)',
+      description:
+        'Walk parentCheckpointId from a given checkpoint back to its root — the engineering ' +
+        'continuity chain across workers/sessions.',
+      inputSchema: { checkpointId: z.string() },
+    },
+    async ({ checkpointId }) => {
+      try {
+        const out = await sessions.checkpointLineage(checkpointId);
+        return ok(
+          out.length === 0
+            ? `Checkpoint ${checkpointId} not found.`
+            : out
+                .map(
+                  (n, i) =>
+                    `${i === 0 ? 'root' : `+${i}`}  ${n.id}  worker=${n.workerId}  ` +
+                    `risk=${n.riskLevel}  ${n.task.slice(0, 40)}  (${n.reason})`,
+                )
+                .join('\n'),
+          { count: out.length, lineage: out },
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_conflict_history',
+    {
+      title: 'Lease-conflict history',
+      description:
+        'Every denied lease with the conflicting holder and (when discoverable) when the ' +
+        'holder acquired it — deterministic projection of the coordination ledger.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const out = await sessions.conflictHistory();
+        return ok(
+          out.length === 0
+            ? 'No lease conflicts recorded.'
+            : out
+                .map(
+                  (c) =>
+                    `${c.deniedAt}  ${c.scopeKind}:${c.scope}  ${c.deniedWorker} blocked by ` +
+                    `${c.holder}${c.holderGrantedAt ? ` (held since ${c.holderGrantedAt})` : ''}`,
+                )
+                .join('\n'),
+          { count: out.length, conflicts: out },
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_retrieval_trace',
+    {
+      title: 'Retrieval causality trace',
+      description:
+        'For a `retrieval.performed` telemetry event id, return the preceding session start, ' +
+        'latest memory refresh, and latest checkpoint — the causal context of the retrieval.',
+      inputSchema: { eventId: z.string() },
+    },
+    async ({ eventId }) => {
+      try {
+        const t = await sessions.retrievalTrace(eventId);
+        if (!t) return ok(`No retrieval event ${eventId}.`, { found: false });
+        const line = (label: string, e?: UnifiedEvent_): string =>
+          e
+            ? `${label}: ${e.ts} [${e.kind}] ${e.worker ?? '-'} ${e.sessionId}`
+            : `${label}: (none)`;
+        return ok(
+          [
+            `Retrieval ${t.retrieval.id} @ ${t.retrieval.ts}`,
+            line('  preceding session.started', t.precedingSessionStart),
+            line('  latest memory.refreshed  ', t.latestMemoryRefresh),
+            line('  latest checkpoint.created', t.latestCheckpointBefore),
+          ].join('\n'),
+          { found: true, trace: t },
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
 }
+
+// Local helper type for the closure above (avoids importing the UnifiedEvent type at
+// the top of registerTools).
+type UnifiedEvent_ = { id: string; ts: string; kind: string; worker?: string; sessionId: string };

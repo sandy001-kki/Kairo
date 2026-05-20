@@ -6,6 +6,49 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-05-20
+
+Deterministic historical engineering introspection before any UI work. See
+[QUERY.md](docs/QUERY.md) and [ADR-0009](docs/adr/0009-introspection-read-only.md).
+
+### Added
+
+- **`src/core/query/`** — pure deterministic query primitives over the existing
+  event / telemetry / audit logs + checkpoint files. **No new state, no new
+  persisted artefacts** (ADR-0009). Same discipline as the session reducer and
+  coordination manager.
+- `queryEvents(filter)` — unified filter (kind/sessionId/worker/since/until) with
+  prefix matching (`lease.*`). Stable ts-only sort preserves append/causal order.
+- `timeline(kind)` — per-concern views: `sessions` / `checkpoints` /
+  `lease-conflicts` / `retrievals` / `memory-refresh`.
+- `checkpointLineage(id)` — walks `parentCheckpointId` to the root; returns the
+  cross-worker DAG path with worker/task/risk at each step.
+- `conflictHistory()` — pairs every `lease.denied` with the conflicting
+  `lease.granted` (and the time it was held since, when discoverable).
+- `retrievalTrace(id)` — for a `retrieval.performed`, returns the preceding
+  session-start, latest memory refresh, and latest checkpoint.
+- `whyEvent(id)` — generic causality: `guard.hold` → preceding `risk.assessed`;
+  `lease.denied` → the conflicting holder grant; else last few in-session events.
+- 5 MCP tools: `kairo_query_events`, `kairo_timeline_query`,
+  `kairo_checkpoint_lineage`, `kairo_conflict_history`, `kairo_retrieval_trace`.
+
+### Changed
+
+- **Namespace visibility refined.** Coordination-class telemetry kinds (`lease.*`,
+  `checkpoint.created`, `session.started`/`ended`, `release.prepared`,
+  `worker.registered`) carry only shared coordination metadata (scope / holder /
+  risk-level / worker id) and are now visible to every worker regardless of the
+  emitting worker's namespace tag. Worker-private kinds
+  (`memory.refreshed` / `retrieval.performed` / `risk.assessed` / `guard.hold`)
+  remain isolated. Regression-tested.
+
+### Notes
+
+- Replay-identical: pure functions of stable inputs (113 tests; dogfood:
+  `queryEvents` over 24 events byte-identical on two runs).
+- Honest scope: **historical introspection, not real-time observability** — no
+  streams, no subscriptions, no UI. v0.9.0 surfaces can build on top.
+
 ## [0.8.0] - 2026-05-20
 
 Enterprise telemetry, analytics, and team-coordination insight — engineering
@@ -351,7 +394,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/sandy001-kki/Kairo/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/sandy001-kki/Kairo/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/sandy001-kki/Kairo/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/sandy001-kki/Kairo/compare/v0.6.1...v0.7.0

@@ -16,6 +16,14 @@ the next agent an exact continuation brief instead of a blank slate.
 
 ## Status
 
+**v0.8.1 — Deterministic engineering introspection.** Read-only query layer over
+the existing event / telemetry / audit logs and checkpoint files — pure
+deterministic projections, **no new state**. Tools: `kairo_query_events`,
+`kairo_timeline_query`, `kairo_checkpoint_lineage`, `kairo_conflict_history`,
+`kairo_retrieval_trace`. Namespace-safe (worker-private memory stays isolated;
+coordination-class telemetry is team-visible by design — it carries no private
+content). Replay-identical; historical, not real-time.
+
 **v0.8.0 — Enterprise telemetry, analytics & team coordination.** Engineering
 intelligence _infrastructure_ — not a dashboard. A local, redacted, append-only
 telemetry log + a pure deterministic analytics projection over telemetry + the
@@ -160,7 +168,7 @@ default; commit it deliberately if you want shared team memory.
 3. When Kairo returns `CHECKPOINT_NOW`, call `kairo_checkpoint`.
 4. `kairo_session_end` writes the final checkpoint and continuation brief.
 
-## MCP surface (v0.8.0)
+## MCP surface (v0.8.1)
 
 | Tool                        | Purpose                                                              |
 | --------------------------- | -------------------------------------------------------------------- |
@@ -191,6 +199,11 @@ default; commit it deliberately if you want shared team memory.
 | `kairo_team_activity`       | Worker activity, lease conflicts, namespace counts                   |
 | `kairo_risk_report`         | Risk escalations and highest-risk modules                            |
 | `kairo_module_activity`     | Touches/risk by module group                                         |
+| `kairo_query_events`        | Deterministic filter over event/telemetry/audit streams (v0.8.1)     |
+| `kairo_timeline_query`      | Per-concern historical timeline view                                 |
+| `kairo_checkpoint_lineage`  | DAG path for a checkpoint (root → target, cross-worker)              |
+| `kairo_conflict_history`    | Every denied lease with its conflicting holder                       |
+| `kairo_retrieval_trace`     | Causal context for a retrieval event                                 |
 
 Resources: `kairo://session/current`, `kairo://checkpoint/latest`.
 Prompt: `kairo_continuity` (the cooperation contract for agents).

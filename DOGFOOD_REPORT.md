@@ -478,3 +478,42 @@ path, which this harness did not exercise — analytics reported 0 honestly.)
 v0.8.0 succeeds: telemetry + analytics give explainable, reproducible insight into
 AI-assisted engineering behaviour with **no secret leaks, no namespace leaks, no
 network, and deterministic content** — exactly the success condition.
+
+---
+
+# Addendum — v0.8.1 Engineering Introspection (dogfood)
+
+2-worker scenario on the Kairo repo (alice + bob): decisions, an overlapping lease
+that gets denied, a retrieval, multiple checkpoints chained across workers.
+
+| Probe                                                                        | Result                                                                                              |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `queryEvents` total                                                          | 24 events (across `event` + `telemetry` + `audit`)                                                  |
+| **Replay-identical** (2 invocations same inputs)                             | **byte-identical id/kind/ts list**                                                                  |
+| `timelineQuery` sessions / checkpoints / conflicts / retrievals / refreshes  | 4 / 3 / 3 / 1 / 3                                                                                   |
+| `conflictHistory()`                                                          | 1 entry: `bob → alice @ src/core/session`                                                           |
+| `checkpointLineage(cpA2)`                                                    | 3 nodes, cross-worker: `alice/manual → bob/manual → alice/manual`                                   |
+| `retrievalTrace(rId)`                                                        | preceding `session.started`, latest `memory.refreshed`, latest `checkpoint.created` — all populated |
+| Namespace-safety: bob sees alice's private `memory.refreshed`                | **false** ✓                                                                                         |
+| Namespace-safety: bob sees alice's `checkpoint.created` (coordination-class) | **true** (by design) ✓                                                                              |
+
+## Findings
+
+- **Replay-identical** confirmed: pure functions over stable inputs.
+- **Cross-worker lineage** walks the DAG end-to-end, attributing each step to its
+  owning worker — correct historical continuity.
+- **Causality reconstructed** for a retrieval (preceding session/refresh/checkpoint).
+- **Real bug caught + fixed in-gate.** A first dogfood pass showed
+  `conflictHistory()` returning empty and `timeline('checkpoints')` returning only
+  the caller's own checkpoints. Root cause: coordination-class telemetry events
+  (`lease.*`, `checkpoint.created`) were tagged with the emitting worker's
+  namespace and the introspection layer was filtering them as "private". Those
+  events carry only shared coordination metadata (scope/holder/risk-level/worker
+  id) — no private content — so they should be team-visible. Refined the
+  visibility rule and added a regression test; worker-private kinds
+  (`memory.refreshed` etc.) remain isolated.
+
+## Honest scope
+
+This is **historical introspection**, not real-time observability. No streams, no
+subscriptions, no UI. v0.9.0 surfaces can build on this.
