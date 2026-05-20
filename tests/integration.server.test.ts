@@ -83,6 +83,11 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
         'kairo_lease',
         'kairo_coordination_status',
         'kairo_timeline',
+        'kairo_telemetry_status',
+        'kairo_analytics_summary',
+        'kairo_team_activity',
+        'kairo_risk_report',
+        'kairo_module_activity',
       ]),
     );
   });
@@ -167,6 +172,12 @@ describe('Kairo MCP server (end-to-end over stdio)', () => {
 
     const timeline = await client.callTool({ name: 'kairo_timeline', arguments: {} });
     expect(textOf(timeline)).toContain('flowchart TD');
+
+    const tStatus = await client.callTool({ name: 'kairo_telemetry_status', arguments: {} });
+    expect(textOf(tStatus)).toMatch(/Telemetry: \d+ local events\. Network: off\./);
+
+    const summary = await client.callTool({ name: 'kairo_analytics_summary', arguments: {} });
+    expect(textOf(summary)).toMatch(/Analytics: \d+ sessions/);
   });
 
   it('persisted the expected .kairo artifacts on disk', async () => {

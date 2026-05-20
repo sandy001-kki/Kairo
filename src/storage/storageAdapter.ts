@@ -2,6 +2,7 @@ import type { AuditEntry, KairoEvent } from '../types/events.js';
 import type { Checkpoint, SessionState } from '../types/domain.js';
 import type { RepoIntelligence } from '../core/repo/types.js';
 import type { VectorIndex } from '../core/vector/types.js';
+import type { TelemetryEvent } from '../core/telemetry/types.js';
 
 /**
  * Persistence seam. Engines depend only on this interface, never on the filesystem.
@@ -43,4 +44,13 @@ export interface StorageAdapter {
 
   /** Append an audit record. Never contains secret values. */
   audit(entry: AuditEntry): Promise<void>;
+  /** Read the audit log (analytics reads redaction/lifecycle counts from here). */
+  readAudit(): Promise<AuditEntry[]>;
+
+  /** Append a telemetry event (separate local log; opt-in export only). */
+  appendTelemetry(event: TelemetryEvent): Promise<void>;
+  readTelemetry(): Promise<TelemetryEvent[]>;
+
+  /** Persist a generated analytics/team/risk report under `.kairo/reports/`. */
+  saveReport(name: string, markdown: string): Promise<void>;
 }

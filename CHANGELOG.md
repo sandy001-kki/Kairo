@@ -6,6 +6,49 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-05-20
+
+Enterprise telemetry, analytics, and team-coordination insight — engineering
+intelligence **infrastructure**, not a dashboard. See
+[TELEMETRY.md](docs/TELEMETRY.md) and
+[ADR-0008](docs/adr/0008-telemetry-analytics.md).
+
+### Added
+
+- **`src/core/telemetry/`** — local, redacted, append-only telemetry log
+  (`.kairo/telemetry.jsonl`) + a pure, deterministic analytics projection over
+  telemetry + the event log + the audit log. No metrics SDK, no sampling, no
+  wall-clock math in metrics, no network.
+- Telemetry events emitted from `SessionManager` / the `kairo_assess` tool path:
+  `session.started`, `checkpoint.created`, `memory.refreshed`,
+  `retrieval.performed`, `graph.generated`, `release.prepared`, `lease.granted`,
+  `lease.denied`, `risk.assessed`, `guard.hold`. Secret-redaction counts come from
+  the authoritative audit log (no double-emit).
+- **Privacy-first defaults**: local JSONL only, secrets redacted at the boundary,
+  team analytics report namespace **names + counts** only (private-namespace
+  contents are never returned). Opt-in export via
+  `KAIRO_TELEMETRY_EXPORT=jsonl:<path>`; OTLP/Prometheus/SQLite/Postgres are
+  designed-for behind `TelemetryExporter` and explicitly not shipped.
+- **Analytics**: sessions per repo, checkpoints per session, average files
+  touched, guard holds, risk escalations, lease conflict rate, stale-memory
+  rebuilds, memory reuse rate, intelligence cache hit rate, graph truncation
+  rate, retrieval patterns, secrets-redacted count, module activity / highest-risk
+  modules (via the salience-ranked module graph).
+- **Reports** rendered to `.kairo/reports/`: `ANALYTICS_SUMMARY.md`,
+  `TEAM_ACTIVITY.md`, `RISK_REPORT.md`.
+- New MCP tools: `kairo_telemetry_status`, `kairo_analytics_summary`,
+  `kairo_team_activity`, `kairo_risk_report`, `kairo_module_activity`.
+
+### Notes
+
+- Determinism upheld: numeric metrics are byte-stable for the same inputs (the
+  only non-deterministic field is the report header's wall-clock `generatedAt`).
+- Honest scope: this is the **local foundation**, not "enterprise-ready". No UI,
+  no remote store, no real-time pipeline.
+- Dogfood (5 scenarios on the Kairo repo): 21 telemetry events across 7 kinds;
+  3 sessions / 3 checkpoints / 2 workers / 1 lease conflict captured deterministically;
+  reports written; **no secret leak**, **no private-namespace text** in any report.
+
 ## [0.7.1] - 2026-05-19
 
 Fixes the v0.7.0 cross-worker session-memory-freshness caveat before any v0.8.0
@@ -308,7 +351,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/sandy001-kki/Kairo/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/sandy001-kki/Kairo/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/sandy001-kki/Kairo/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/sandy001-kki/Kairo/compare/v0.6.0...v0.6.1

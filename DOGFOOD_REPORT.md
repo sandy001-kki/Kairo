@@ -406,3 +406,75 @@ index was keyed only by repo fingerprint). Two workers on the Kairo repo, shared
 
 v0.7.1 succeeds: shared coordination memory is **fresh, deterministic,
 namespace-safe, and explainable**. Safe to proceed to v0.8.0.
+
+---
+
+# Addendum — v0.8.0 Telemetry & Analytics (dogfood)
+
+Five scenarios driven through `SessionManager` on the Kairo repo (one worker,
+two-worker, memory refresh, lease denied, checkpoint chain), then the analytics +
+reports were generated.
+
+## Captured telemetry (21 events / 7 kinds, deterministic)
+
+```
+session.started=3, checkpoint.created=3, memory.refreshed=9,
+lease.granted=2, lease.denied=1, retrieval.performed=1, graph.generated=2
+```
+
+(No `risk.assessed` / `guard.hold`: those are emitted from the `kairo_assess` tool
+path, which this harness did not exercise — analytics reported 0 honestly.)
+
+## Analytics (excerpt)
+
+| Metric                             | Value                           |
+| ---------------------------------- | ------------------------------- |
+| sessions / repos / checkpoints     | 3 / 1 / 3                       |
+| lease granted / denied             | 2 / 1 (conflict rate **33.3%**) |
+| memory rebuilds (stale prevented)  | 5 (reuse rate 44.4%)            |
+| intelligence cache hit rate        | **66.7%**                       |
+| graphs generated / truncation rate | 2 / 0%                          |
+| retrievals                         | 1                               |
+| **secrets redacted (audit)**       | **7**                           |
+
+## Team activity
+
+- Workers: `alice[alice]` (2 sessions, 2 checkpoints), `bob[bob]` (1, 1).
+- Lease conflict map: 1 entry — `bob` blocked by `alice` on `path:src/core/session`.
+- Namespaces: `alice`, `bob`. Shared telemetry events: 0; private (worker-
+  namespaced) telemetry events: 21 (per-worker isolation default — correct).
+
+## Success-condition checks
+
+- **No secret leak in any report.** Alice recorded a decision containing a
+  fake-secret token; redaction boundary caught **7 redactions** (audit count) and
+  the token appears in **no** report. (`grep AKIAIOSFODNN7EXAMPLE` over the three
+  reports → empty.)
+- **No private-namespace text in any report.** Alice's private decision summary
+  (`plover`) does not appear in `ANALYTICS_SUMMARY.md`, `TEAM_ACTIVITY.md` or
+  `RISK_REPORT.md`. Team analytics reports namespace **names and counts only**.
+- **Deterministic content.** `analyticsSummary` invoked twice produced identical
+  JSON when the wall-clock `generatedAt` is excluded (the only intentionally
+  non-deterministic field — a report header timestamp). Numeric metrics are
+  byte-stable.
+- **No network.** `kairo_telemetry_status`: `network: off`, `export: disabled`.
+
+## Honest findings
+
+- An initial probe compared full JSON of two `analyticsSummary()` calls and
+  reported "determinism: false". The cause was the **probe**, not the engine — it
+  included the wall-clock `generatedAt` field. Numeric content is deterministic
+  (proven by the unit test that uses a fixed `generatedAt`). Documented rather
+  than hidden.
+- `risk.assessed` / `guard.hold` aren't emitted from the direct `SessionManager`
+  API path, only from the `kairo_assess` MCP tool. Direct-API dogfooding reports
+  zeros for those metrics, which the report shows truthfully.
+- This is the **local foundation**, not enterprise-ready: no UI, no remote store,
+  no real-time pipeline. The `TelemetryExporter` interface is the seam for those;
+  v0.8.0 ships only the local opt-in `jsonl:<path>` exporter.
+
+## Verdict
+
+v0.8.0 succeeds: telemetry + analytics give explainable, reproducible insight into
+AI-assisted engineering behaviour with **no secret leaks, no namespace leaks, no
+network, and deterministic content** — exactly the success condition.

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { StorageAdapter } from './storageAdapter.js';
 import { kairoPaths, type KairoPaths } from './paths.js';
 import type { AuditEntry, KairoEvent } from '../types/events.js';
+import type { TelemetryEvent } from '../core/telemetry/types.js';
 import type { Checkpoint, SessionState } from '../types/domain.js';
 import type { RepoIntelligence } from '../core/repo/types.js';
 import type { VectorIndex } from '../core/vector/types.js';
@@ -136,6 +137,22 @@ export class FileStorageAdapter implements StorageAdapter {
     await appendFile(this.paths.audit, `${JSON.stringify(entry)}\n`, 'utf8');
   }
 
+  async readAudit(): Promise<AuditEntry[]> {
+    return this.readJsonl<AuditEntry>(this.paths.audit);
+  }
+
+  async appendTelemetry(event: TelemetryEvent): Promise<void> {
+    await appendFile(this.paths.telemetry, `${JSON.stringify(event)}\n`, 'utf8');
+  }
+
+  async readTelemetry(): Promise<TelemetryEvent[]> {
+    return this.readJsonl<TelemetryEvent>(this.paths.telemetry);
+  }
+
+  async saveReport(name: string, markdown: string): Promise<void> {
+    await this.writeAtomic(this.paths.reportFile(name), markdown);
+  }
+
   // ── internals ────────────────────────────────────────────────────────────
 
   private async writeAtomic(path: string, content: string): Promise<void> {
@@ -150,6 +167,22 @@ export class FileStorageAdapter implements StorageAdapter {
     } catch {
       return '';
     }
+  }
+
+  /** Tolerant JSONL reader (skips a torn trailing line — crash recovery). */
+  private async readJsonl<T>(path: string): Promise<T[]> {
+    const raw = await this.readFileOrEmpty(path);
+    if (raw.length === 0) return [];
+    const lines = raw.split('\n').filter((l) => l.trim().length > 0);
+    const out: T[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      try {
+        out.push(JSON.parse(lines[i] as string) as T);
+      } catch {
+        if (i !== lines.length - 1) logger.error(`Corrupt JSONL line ${i + 1} in ${path}`);
+      }
+    }
+    return out;
   }
 
   private async readJson<T>(path: string): Promise<T | undefined> {

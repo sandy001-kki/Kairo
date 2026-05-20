@@ -403,12 +403,13 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
           .optional(),
       },
     },
-    ({ intent, files }) => {
+    async ({ intent, files }) => {
       try {
         const g = sessions.assess({
           ...(intent !== undefined ? { intent } : {}),
           ...(files !== undefined ? { files } : {}),
         });
+        await sessions.recordAssessment(g.decision, g.risk.level, g.pressure.directive);
         return ok(
           `${g.directive}\n\n${g.reasons.join('\n')}`,
           {
@@ -771,6 +772,125 @@ export function registerTools(server: McpServer, sessions: SessionManager): void
       try {
         const t = await sessions.timeline();
         return ok(t.markdown, { checkpoints: t.checkpoints });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  // ── Telemetry & analytics (v0.8.0) ───────────────────────────────────────
+
+  server.registerTool(
+    'kairo_telemetry_status',
+    {
+      title: 'Telemetry status',
+      description:
+        'Local-only telemetry status: event counts by kind, export state. No network, ' +
+        'no external analytics, secrets redacted (ADR-0008).',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const s = await sessions.telemetryStatus();
+        return ok(
+          `Telemetry: ${s.events} local events. Network: off. Export: ${s.exportEnabled ? 'opt-in enabled' : 'disabled'}.`,
+          s,
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_analytics_summary',
+    {
+      title: 'Analytics summary',
+      description:
+        'Deterministic engineering analytics (sessions, checkpoints, guard holds, ' +
+        'lease conflicts, cache rates, retrieval patterns). Writes ' +
+        '.kairo/reports/ANALYTICS_SUMMARY.md (+ TEAM_ACTIVITY/RISK_REPORT).',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const { analytics } = await sessions.writeReports();
+        return ok(
+          `Analytics: ${analytics.sessions} sessions, ${analytics.checkpoints} checkpoints, ` +
+            `${analytics.guardHoldCount} guard holds, lease conflict rate ` +
+            `${(analytics.leaseConflictRate * 100).toFixed(1)}%, cache hit ` +
+            `${(analytics.intelligenceCacheHitRate * 100).toFixed(1)}%. Reports written.`,
+          analytics,
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_team_activity',
+    {
+      title: 'Team coordination activity',
+      description:
+        'Worker activity, lease-conflict map, and namespace usage from the shared ' +
+        'ledger. Reports namespace names/counts only — never private memory contents.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const t = await sessions.teamActivity();
+        return ok(
+          `${t.workers.length} worker(s), ${t.leaseConflicts.length} lease conflict(s), ` +
+            `namespaces: ${t.namespaces.join(', ') || '(none)'}.`,
+          t,
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_risk_report',
+    {
+      title: 'Engineering risk report',
+      description:
+        'Risk escalations, guard holds, decision breakdown, and highest-risk modules. ' +
+        'Deterministic projection.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const rr = await sessions.riskReport();
+        return ok(
+          `${rr.escalations} escalation(s), ${rr.guardHolds} guard hold(s), ` +
+            `${rr.highRiskModules.length} high-risk module(s).`,
+          rr,
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'kairo_module_activity',
+    {
+      title: 'Module activity & risk',
+      description:
+        'Most-active and highest-risk modules, attributed from changed files via the ' +
+        'module graph. Deterministic.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const mods = await sessions.moduleActivity();
+        const top = mods
+          .slice(0, 15)
+          .map((m) => `- ${m.module}: ${m.touches} touches, risk ${m.riskLevel}`)
+          .join('\n');
+        return ok(top || 'No module activity recorded.', { modules: mods.slice(0, 30) });
       } catch (e) {
         return fail(e);
       }

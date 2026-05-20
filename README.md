@@ -16,6 +16,16 @@ the next agent an exact continuation brief instead of a blank slate.
 
 ## Status
 
+**v0.8.0 — Enterprise telemetry, analytics & team coordination.** Engineering
+intelligence _infrastructure_ — not a dashboard. A local, redacted, append-only
+telemetry log + a pure deterministic analytics projection over telemetry + the
+event/audit logs. Privacy-first defaults: no network, no external analytics, opt-in
+export only; namespace-safe (team reports name namespaces, never their private
+contents). Three reports written to `.kairo/reports/` and five MCP tools
+(`kairo_telemetry_status` / `_analytics_summary` / `_team_activity` /
+`_risk_report` / `_module_activity`). Honestly the _local foundation_, not yet
+"enterprise-ready".
+
 **v0.7.1 — Cross-worker memory freshness.** The v0.7.0 caveat is fixed: the vector
 index now also keys on a deterministic `memoryFingerprint` (hash of the built chunk
 set), so a decision/checkpoint/worker change invalidates stale cross-worker memory
@@ -150,7 +160,7 @@ default; commit it deliberately if you want shared team memory.
 3. When Kairo returns `CHECKPOINT_NOW`, call `kairo_checkpoint`.
 4. `kairo_session_end` writes the final checkpoint and continuation brief.
 
-## MCP surface (v0.7.0)
+## MCP surface (v0.8.0)
 
 | Tool                        | Purpose                                                              |
 | --------------------------- | -------------------------------------------------------------------- |
@@ -176,6 +186,11 @@ default; commit it deliberately if you want shared team memory.
 | `kairo_lease`               | Cooperative task/path/module lease (acquire/renew/release)           |
 | `kairo_coordination_status` | Active workers, held leases, ownership                               |
 | `kairo_timeline`            | Distributed checkpoint graph (engineering timeline, Mermaid)         |
+| `kairo_telemetry_status`    | Local telemetry status (no network; opt-in export flag)              |
+| `kairo_analytics_summary`   | Deterministic analytics + write 3 reports to `.kairo/reports/`       |
+| `kairo_team_activity`       | Worker activity, lease conflicts, namespace counts                   |
+| `kairo_risk_report`         | Risk escalations and highest-risk modules                            |
+| `kairo_module_activity`     | Touches/risk by module group                                         |
 
 Resources: `kairo://session/current`, `kairo://checkpoint/latest`.
 Prompt: `kairo_continuity` (the cooperation contract for agents).

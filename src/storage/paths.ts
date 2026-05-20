@@ -9,6 +9,7 @@ export interface KairoPaths {
   base: string;
   events: string;
   audit: string;
+  telemetry: string;
   sessionsDir: string;
   checkpointsDir: string;
   continuationsDir: string;
@@ -23,6 +24,7 @@ export interface KairoPaths {
   intelligenceFile: (fingerprint: string) => string;
   latestIntelligenceFile: string;
   graphFile: (kind: string) => string;
+  reportFile: (name: string) => string;
 }
 
 export function resolveProjectRoot(explicit?: string): string {
@@ -37,6 +39,7 @@ export function kairoPaths(explicitRoot?: string): KairoPaths {
     base,
     events: join(base, 'events.jsonl'),
     audit: join(base, 'audit.jsonl'),
+    telemetry: join(base, 'telemetry.jsonl'),
     sessionsDir: join(base, 'sessions'),
     checkpointsDir: join(base, 'checkpoints'),
     continuationsDir: join(base, 'continuations'),
@@ -51,5 +54,6 @@ export function kairoPaths(explicitRoot?: string): KairoPaths {
     intelligenceFile: (fp) => join(base, 'intelligence', `${fp}.json`),
     latestIntelligenceFile: join(base, 'intelligence', 'latest.json'),
     graphFile: (kind) => join(base, 'graphs', `${kind}.md`),
+    reportFile: (name) => join(base, 'reports', name),
   };
 }

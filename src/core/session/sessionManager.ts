@@ -37,6 +37,25 @@ import { MemoryEngine } from '../vector/memory/memoryEngine.js';
 import type { RetrievalQuery, RetrievalResult } from '../vector/types.js';
 import { CoordinationManager } from '../coordination/coordinationManager.js';
 import type { CoordinationState, LeaseDecision, LeaseScopeKind } from '../coordination/types.js';
+import { TelemetryRecorder } from '../telemetry/recorder.js';
+import {
+  analyticsSummary,
+  teamActivity,
+  riskReport,
+  moduleActivity,
+} from '../telemetry/analytics.js';
+import {
+  renderAnalyticsSummary,
+  renderTeamActivity,
+  renderRiskReport,
+} from '../telemetry/reports.js';
+import { resolveExporter } from '../telemetry/exporter.js';
+import type {
+  AnalyticsSummary,
+  ModuleActivity,
+  RiskReport,
+  TeamActivity,
+} from '../telemetry/types.js';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Clock } from '../../utils/time.js';
@@ -91,6 +110,7 @@ export class SessionManager {
   private readonly scanner: RepoScanner;
   private readonly memory: MemoryEngine;
   private readonly coordination: CoordinationManager;
+  private readonly telemetry: TelemetryRecorder;
 
   constructor(
     private readonly adapter: StorageAdapter,
@@ -100,6 +120,7 @@ export class SessionManager {
     this.scanner = new RepoScanner(clock);
     this.memory = new MemoryEngine(adapter);
     this.coordination = new CoordinationManager(adapter, clock);
+    this.telemetry = new TelemetryRecorder(adapter, clock);
   }
 
   async init(): Promise<void> {
@@ -146,6 +167,13 @@ export class SessionManager {
       await this.persistGraphs(intelligence);
       intelligenceFromCache = false;
     }
+    this.telemetry.setContext(sessionId, this.workerId, this.namespace);
+    await this.telemetry.emit('session.started', {
+      repo: args.projectRoot,
+      resumed,
+      intelligenceFromCache,
+    });
+
     // Build/reuse semantic memory (fingerprint-keyed: no re-embed on a cache hit).
     await this.indexMemory(intelligence).catch((e) =>
       logger.warn(`Memory index skipped: ${e instanceof Error ? e.message : String(e)}`),
@@ -256,6 +284,11 @@ export class SessionManager {
       checkpointId: out.checkpoint.id,
       reason: input.reason,
     });
+    await this.telemetry.emit('checkpoint.created', {
+      reason: input.reason,
+      files: Object.keys(state.changedFiles).length,
+      risk: out.checkpoint.risk.level,
+    });
     // Refresh shared memory so this checkpoint is visible to other workers and to
     // this brief's own recall (auto-invalidated by the memory fingerprint, v0.7.1).
     await this.refreshMemory();
@@ -280,6 +313,11 @@ export class SessionManager {
     await this.append(state.id, 'checkpoint.created', {
       checkpointId: out.checkpoint.id,
       reason: 'session-end',
+    });
+    await this.telemetry.emit('checkpoint.created', {
+      reason: 'session-end',
+      files: Object.keys(state.changedFiles).length,
+      risk: out.checkpoint.risk.level,
     });
     await this.append(state.id, 'session.ended', {});
     await this.refreshMemory();
@@ -354,7 +392,12 @@ export class SessionManager {
     } catch {
       /* no package.json / unparseable: fall back to 0.0.0 */
     }
-    return proposeReleasePlan(state, version);
+    const plan = proposeReleasePlan(state, version);
+    await this.telemetry.emit('release.prepared', {
+      bump: plan.bump,
+      nextVersion: plan.nextVersion,
+    });
+    return plan;
   }
 
   /** Latest persisted checkpoint across all sessions (for the MCP resource). */
@@ -377,6 +420,12 @@ export class SessionManager {
     const intel = await this.loadValidIntelligence();
     if (!intel) return undefined;
     const graph = buildGraph(intel, kind);
+    await this.telemetry.emit('graph.generated', {
+      kind,
+      nodes: graph.nodes.length,
+      edges: graph.edges.length,
+      truncated: graph.truncated,
+    });
     return { graph, markdown: renderGraphMarkdown(graph) };
   }
 
@@ -443,13 +492,25 @@ export class SessionManager {
       },
       force,
     );
+    await this.telemetry.emit('memory.refreshed', {
+      rebuilt: !r.reused,
+      chunks: r.chunks,
+    });
     return { chunks: r.chunks, reused: r.reused };
   }
 
   /** Hybrid, explainable semantic recall — isolated to this worker's namespace. */
   async searchMemory(query: RetrievalQuery): Promise<RetrievalResult[]> {
     const checkpoint = await this.adapter.loadLatestCheckpoint();
-    return this.memory.search(query, { checkpoint, namespace: this.namespace });
+    const results = await this.memory.search(query, {
+      checkpoint,
+      namespace: this.namespace,
+    });
+    await this.telemetry.emit('retrieval.performed', {
+      results: results.length,
+      topKind: results[0]?.chunk.kind ?? 'none',
+    });
+    return results;
   }
 
   /**
@@ -502,13 +563,19 @@ export class SessionManager {
     ttlSeconds?: number;
   }): Promise<LeaseDecision> {
     const sid = this.requireSession().id;
-    return this.coordination.acquire({
+    const d = await this.coordination.acquire({
       sessionId: sid,
       workerId: this.workerId,
       scopeKind: args.scopeKind,
       scope: args.scope,
       ttlMs: Math.max(1, args.ttlSeconds ?? 1800) * 1000,
     });
+    await this.telemetry.emit(d.granted ? 'lease.granted' : 'lease.denied', {
+      scopeKind: args.scopeKind,
+      scope: args.scope,
+      ...(d.conflict ? { holder: d.conflict.workerId } : {}),
+    });
+    return d;
   }
 
   async renewLease(leaseId: string, ttlSeconds = 1800): Promise<LeaseDecision> {
@@ -529,6 +596,74 @@ export class SessionManager {
   async timeline(): Promise<{ markdown: string; checkpoints: number }> {
     const graph = await this.coordination.timelineGraph();
     return { markdown: renderGraphMarkdown(graph), checkpoints: graph.nodes.length };
+  }
+
+  // ── Telemetry & analytics (v0.8.0) ───────────────────────────────────────
+
+  /** Emit guardrail telemetry (called by the kairo_assess tool path). */
+  async recordAssessment(decision: string, riskLevel: string, directive: string): Promise<void> {
+    await this.telemetry.emit('risk.assessed', {
+      decision,
+      riskLevel,
+      pressureDirective: directive,
+    });
+    if (decision === 'HOLD') await this.telemetry.emit('guard.hold', { riskLevel });
+  }
+
+  private async analyticsInputs(): Promise<Parameters<typeof analyticsSummary>[0]> {
+    const [telemetry, events, audit, sessions, coordination] = await Promise.all([
+      this.adapter.readTelemetry(),
+      this.adapter.readEvents(),
+      this.adapter.readAudit(),
+      this.priorSessions(),
+      this.coordination.state(),
+    ]);
+    return { telemetry, events, audit, sessions, coordination, generatedAt: this.clock.iso() };
+  }
+
+  async analyticsSummary(): Promise<AnalyticsSummary> {
+    return analyticsSummary(await this.analyticsInputs());
+  }
+  async teamActivity(): Promise<TeamActivity> {
+    return teamActivity(await this.analyticsInputs());
+  }
+  async riskReport(): Promise<RiskReport> {
+    return riskReport(await this.analyticsInputs());
+  }
+  async moduleActivity(): Promise<ModuleActivity[]> {
+    return moduleActivity(await this.priorSessions());
+  }
+
+  /** Render the three reports to `.kairo/reports/` and opt-in export (no network). */
+  async writeReports(): Promise<{ analytics: AnalyticsSummary; reports: string[] }> {
+    const inputs = await this.analyticsInputs();
+    const a = analyticsSummary(inputs);
+    await this.adapter.saveReport('ANALYTICS_SUMMARY.md', renderAnalyticsSummary(a));
+    await this.adapter.saveReport('TEAM_ACTIVITY.md', renderTeamActivity(teamActivity(inputs)));
+    await this.adapter.saveReport('RISK_REPORT.md', renderRiskReport(riskReport(inputs)));
+    const exporter = resolveExporter();
+    if (exporter) await exporter.export(inputs.telemetry);
+    return {
+      analytics: a,
+      reports: ['ANALYTICS_SUMMARY.md', 'TEAM_ACTIVITY.md', 'RISK_REPORT.md'],
+    };
+  }
+
+  async telemetryStatus(): Promise<{
+    events: number;
+    byKind: Record<string, number>;
+    exportEnabled: boolean;
+    network: false;
+  }> {
+    const tel = await this.adapter.readTelemetry();
+    const byKind: Record<string, number> = {};
+    for (const e of tel) byKind[e.kind] = (byKind[e.kind] ?? 0) + 1;
+    return {
+      events: tel.length,
+      byKind,
+      exportEnabled: resolveExporter() !== undefined,
+      network: false,
+    };
   }
 
   /** Augment a checkpoint with owning worker + parent checkpoint (the DAG link). */

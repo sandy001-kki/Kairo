@@ -103,8 +103,9 @@ CHECKPOINT_NOW`. The directive is attached to every tool response.
 | 0.5.2     | Reusable salience subsystem; salience-aware graph truncation                                                |
 | 0.6.0     | Vector / semantic memory: architecture-aware hybrid recall                                                  |
 | 0.6.1     | Embedding provider layer (deterministic default; pluggable semantic)                                        |
-| **0.7.0** | Coordinated cognition & distributed engineering memory — _this release_                                     |
-| 0.8.0     | Enterprise: telemetry, analytics, team coordination                                                         |
+| 0.7.0     | Coordinated cognition & distributed engineering memory                                                      |
+| 0.7.1     | Cross-worker memory freshness (deterministic memory fingerprint)                                            |
+| **0.8.0** | Enterprise telemetry, analytics & team coordination — _this release_                                        |
 | 0.9.0     | IDE/dashboard surfaces (VS Code, Cursor, web)                                                               |
 | 1.0.0     | Stable production release                                                                                   |
 
@@ -310,3 +311,27 @@ Honest limitation: this is cooperative file-based coordination (O_APPEND atomici
 deterministic projection), **not** partition-tolerant consensus. Suitable for
 same-host / shared-volume teams; documented, not oversold. Future shared-team
 cognition is more projections over the same ledger — no redesign.
+
+## 15. Telemetry & analytics (v0.8.0, ADR-0008)
+
+`src/core/telemetry/` is engineering-intelligence **infrastructure**, not a
+dashboard. Telemetry is a separate, local, redacted, append-only log
+(`.kairo/telemetry.jsonl`); analytics is a **pure deterministic projection** over
+telemetry + the event log + the audit log — same discipline as the session reducer,
+coordination manager, and memory fingerprint.
+
+Privacy-first defaults: no network, secrets redacted at the boundary, opt-in
+export only via `KAIRO_TELEMETRY_EXPORT=jsonl:<path>`. The `TelemetryExporter`
+interface is the seam for future OTLP/Prometheus/SQLite/Postgres adapters —
+deliberately not shipped. Secret-redaction counts are read from the authoritative
+audit log to avoid double-counting / divergence.
+
+Namespace isolation (v0.7.x) is unchanged: team-activity reports namespace **names
+and counts** only; private-namespace chunk contents never appear in any report
+(asserted end-to-end by the dogfood + unit tests). The only non-deterministic
+output field is the report header's wall-clock `generatedAt`; numeric content is
+byte-stable for the same inputs.
+
+Honest scope: this is the **local foundation**, not enterprise-ready. No UI, no
+remote store, no real-time pipeline. Adding a metric = extend a pure function;
+adding a backend = implement `TelemetryExporter`.

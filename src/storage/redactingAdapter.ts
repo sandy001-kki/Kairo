@@ -93,5 +93,21 @@ export function withRedaction(inner: StorageAdapter, clock: Clock): StorageAdapt
 
     // Audit entries are constructed internally and never carry secret values.
     audit: (entry: AuditEntry) => inner.audit(entry),
+    readAudit: () => inner.readAudit(),
+
+    async appendTelemetry(event): Promise<void> {
+      // Telemetry fields are structured non-secret scalars by construction; we still
+      // sanitise as defence in depth so it can never become a leak side-channel.
+      const { value, findings } = sanitize(event);
+      await inner.appendTelemetry(value);
+      await auditFindings('telemetry', findings);
+    },
+    readTelemetry: () => inner.readTelemetry(),
+
+    async saveReport(name: string, markdown: string): Promise<void> {
+      const { value, findings } = sanitize(markdown);
+      await inner.saveReport(name, value);
+      await auditFindings(`report:${name}`, findings);
+    },
   };
 }
