@@ -3,8 +3,15 @@
 > Persistent engineering memory and session-continuity for AI coding agents.
 > Local-first. Deterministic. Replay-safe.
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue)](CHANGELOG.md)
-[![Tests](https://img.shields.io/badge/tests-193%20passing-green)](#)
+[![Latest release](https://img.shields.io/github/v/release/sandy001-kki/Kairo?display_name=tag&sort=semver&color=blue)](https://github.com/sandy001-kki/Kairo/releases)
+[![Tests](https://img.shields.io/badge/tests-193%20passing-brightgreen)](tests)
+[![ADRs](https://img.shields.io/badge/ADRs-16-informational)](docs/adr)
+[![MCP tools](https://img.shields.io/badge/MCP%20tools-41-blueviolet)](docs/API_STABILITY.md)
+[![Stable surface](https://img.shields.io/badge/stable-33%20tools%20%2B%2014%20routes-success)](docs/API_STABILITY.md)
+[![Node](https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white)](package.json)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
+[![Local-first](https://img.shields.io/badge/local--first-no%20network-555)](docs/ARCHITECTURE.md)
+[![Deterministic](https://img.shields.io/badge/deterministic-replay--safe-555)](docs/adr/0001-event-sourced-storage.md)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 
 Kairo sits between AI coding agents — Claude Code, Cursor, Codex, Gemini CLI —
