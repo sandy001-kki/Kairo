@@ -16,6 +16,25 @@ the next agent an exact continuation brief instead of a blank slate.
 
 ## Status
 
+**v1.0.0 — Stable production release.** Kairo's cognition architecture,
+storage guarantees, and integration boundaries are stable and trustworthy.
+Anything marked `stable` in
+[`src/contracts/stability.ts`](src/contracts/stability.ts) — 33 MCP tools,
+1 prompt, 2 resources, 14 inspect routes, 7 schemas, and the snapshot
+format — stays callable with the same shape across every v1.x release.
+6 tools (`kairo_benchmark`, `kairo_perf_report`, `kairo_compact_memory`,
+`kairo_index_status`, `kairo_plugins_list`, `kairo_stability_of`) remain
+experimental and may evolve in minor versions. See
+[API_STABILITY](docs/API_STABILITY.md),
+[V1_READINESS](docs/V1_READINESS.md),
+[RELEASE_AUDIT_v1.0.0-rc1](docs/RELEASE_AUDIT_v1.0.0-rc1.md), and
+[DOGFOOD_v1.0.0-rc1](docs/DOGFOOD_v1.0.0-rc1.md).
+
+> v1.0.0 does **not** mean "feature-complete forever". It means: the
+> contract is stable. The five "What Kairo IS NOT" boundaries below
+> remain load-bearing — anything in those categories is a v2.x
+> conversation, not a v1.x backlog item.
+
 **v0.9.4 — Extensibility, surface stability, SDK ergonomics & MCP
 compatibility.** Final slice of v0.9.x stabilization before v1.0.0. Adds
 **API stability tiers** (`stable` / `experimental` / `internal` /

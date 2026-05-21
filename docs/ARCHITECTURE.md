@@ -141,8 +141,8 @@ CHECKPOINT_NOW`. The directive is attached to every tool response.
 | 0.9.1     | Schema versioning, formal contracts & corruption quarantine                                                 |
 | 0.9.2     | Snapshot/import/export & failure-injection testing                                                          |
 | 0.9.3     | Scale, performance & storage efficiency (benchmarks, incremental indexing, compaction)                      |
-| **0.9.4** | Extensibility, surface stability, SDK ergonomics & MCP compatibility — _this release_                       |
-| 1.0.0     | Stable production release                                                                                   |
+| 0.9.4     | Extensibility, surface stability, SDK ergonomics & MCP compatibility                                        |
+| **1.0.0** | **Stable production release** — _this release_                                                              |
 
 Security was deliberately pulled into 0.1.0 rather than a later phase: every checkpoint
 persists potentially secret content from the first write, so the redaction boundary

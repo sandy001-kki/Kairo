@@ -132,4 +132,19 @@ describe('SessionManager continuity loop', () => {
     expect(cp.checkpoint.risk.level).toBe('high');
     expect(cp.brief).toContain('Engineering risk at checkpoint');
   });
+
+  // rc1 dogfood regression: heartbeat() with no arguments must not crash.
+  // The MCP tool always passes an object, but the SessionManager API was
+  // documented as accepting an optional arg shape — and was honestly broken
+  // until v1.0.0-rc1 dogfooding caught it.
+  it('heartbeat with no arguments works (rc1 dogfood regression)', async () => {
+    const m = makeManager();
+    await m.init();
+    await m.startSession({ agent: 'a', task: 't', projectRoot: root });
+    const snap = await m.heartbeat();
+    expect(snap.directive).toMatch(/CONTINUE|CHECKPOINT_SOON|CHECKPOINT_NOW/);
+    // And the named-arg form still works.
+    const snap2 = await m.heartbeat({ note: 'still here' });
+    expect(snap2.directive).toMatch(/CONTINUE|CHECKPOINT_SOON|CHECKPOINT_NOW/);
+  });
 });

@@ -6,6 +6,82 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-05-21
+
+**Stable production release.**
+
+> v1.0.0 means: Kairo's cognition architecture, storage guarantees, and
+> integration boundaries are stable and trustworthy. It does NOT mean
+> "feature-complete forever".
+
+See [`docs/RELEASE_AUDIT_v1.0.0-rc1.md`](docs/RELEASE_AUDIT_v1.0.0-rc1.md)
+for the pre-release audit (10 areas, all PASS) and
+[`docs/DOGFOOD_v1.0.0-rc1.md`](docs/DOGFOOD_v1.0.0-rc1.md) for the
+operational dogfood cycle that ran between rc1 and v1.0.0.
+
+### What's stable (the v1.0.0 contract)
+
+- **33 stable MCP tools** (continuity loop, intelligence, risk, GitHub,
+  graph, memory, coordination, telemetry, analytics, query, brief,
+  snapshot).
+- **6 experimental MCP tools** (`kairo_benchmark`, `kairo_perf_report`,
+  `kairo_compact_memory`, `kairo_index_status`, `kairo_plugins_list`,
+  `kairo_stability_of`) — kept experimental for now per the dogfood
+  decision; promotion candidates for v1.0.x or v1.1.0.
+- **1 stable prompt** (`kairo_continuity`), **2 stable resources**
+  (`kairo://session/current`, `kairo://checkpoint/latest`).
+- **14 stable inspect HTTP routes**.
+- **7 stable schema constants** (events, telemetry, audit, sessions,
+  checkpoints, intelligence, vector index — all under ADR-0012).
+- **Stable snapshot format** (`snapshotSchema: 1`).
+- **Stable token-discipline contract** (compact by default, reports to
+  files; brief modes `tiny`/`normal`/`deep` with their v0.8.2 budgets).
+
+The full registry lives in
+[`src/contracts/stability.ts`](src/contracts/stability.ts); the policy
+lives in [`docs/API_STABILITY.md`](docs/API_STABILITY.md). Anything
+marked `stable` there stays callable with the same shape on every v1.x
+release.
+
+### What v1.0.0 is NOT (5 boundaries on the README front page)
+
+1. Not distributed consensus.
+2. Not SaaS.
+3. Not autonomous AGI orchestration.
+4. Not guaranteed semantic truth.
+5. Not real-time collaborative editing.
+
+Out of scope **by design**, not deferred.
+
+### Changes vs v1.0.0-rc1
+
+Code diff between rc1 and v1.0.0 is intentionally tiny — only what the
+dogfood cycle found:
+
+- **Fixed (bug):** `SessionManager.heartbeat()` crashed when called
+  without arguments (`args.reread` on undefined). The MCP tool always
+  passed an object, so the e2e tests missed it; the SDK / direct-import
+  path failed. Default arg added; regression test in
+  `tests/session.test.ts`.
+- **Fixed (polish):** Continuation brief's "Recommended next actions"
+  section showed a duplicate "Investigate and resolve outstanding
+  errors" line with a `..` double period when there were unresolved
+  errors. `recommendNextActions` now strips a trailing `.` before
+  re-adding one and skips the "Continue remaining work" item when the
+  remaining entry is the auto-injected error-investigation boilerplate
+  (already covered by the "Resolve N unresolved errors" action above).
+- **Added:** `docs/DOGFOOD_v1.0.0-rc1.md` — the operational dogfood
+  report with all findings, observations, and decisions.
+
+### Notes
+
+- **182/182 tests** pass on the v1.0.0 commit. Lint, typecheck, prettier,
+  build clean.
+- No schema bumps. No new MCP tools. No new architecture principles. No
+  new persisted artefacts. v1.0.0 is the contract, not a feature push.
+- The compatibility matrix and v1.0.0 entry criteria from
+  [`docs/V1_READINESS.md`](docs/V1_READINESS.md) are all checked.
+
 ## [1.0.0-rc1] - 2026-05-21
 
 Release-candidate audit pass before v1.0.0. **No new features, no
@@ -705,7 +781,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.0.0-rc1...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/sandy001-kki/Kairo/compare/v1.0.0-rc1...v1.0.0
 [1.0.0-rc1]: https://github.com/sandy001-kki/Kairo/compare/v0.9.4...v1.0.0-rc1
 [0.9.4]: https://github.com/sandy001-kki/Kairo/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/sandy001-kki/Kairo/compare/v0.9.2...v0.9.3

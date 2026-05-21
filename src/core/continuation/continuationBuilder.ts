@@ -184,7 +184,14 @@ function recommendNextActions(cp: Checkpoint): string[] {
   }
   const firstRemaining = cp.remainingWork[0];
   if (firstRemaining) {
-    actions.push(`Continue remaining work, starting with: ${firstRemaining}.`);
+    // rc1 dogfood polish: strip a trailing period before re-adding one (avoids "..");
+    // skip when the remaining item is the auto-injected error-investigation boilerplate
+    // (already covered by the "Resolve N unresolved errors" action above).
+    const trimmed = firstRemaining.replace(/\.+\s*$/, '');
+    const isErrorBoilerplate = /^Investigate and resolve outstanding errors/.test(trimmed);
+    if (!isErrorBoilerplate) {
+      actions.push(`Continue remaining work, starting with: ${trimmed}.`);
+    }
   }
   const highRisk = cp.changedFiles.filter((f) => f.risk === 'high').map((f) => f.path);
   if (highRisk.length > 0) {

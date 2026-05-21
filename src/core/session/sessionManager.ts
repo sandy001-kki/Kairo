@@ -282,11 +282,13 @@ export class SessionManager {
     return this.pressure();
   }
 
-  async heartbeat(args: {
-    reread?: string | undefined;
-    note?: string | undefined;
-    turns?: number | undefined;
-  }): Promise<PressureSnapshot> {
+  async heartbeat(
+    args: {
+      reread?: string | undefined;
+      note?: string | undefined;
+      turns?: number | undefined;
+    } = {},
+  ): Promise<PressureSnapshot> {
     const sid = this.requireSession().id;
     await this.append(sid, 'heartbeat', {
       ...(args.reread !== undefined ? { reread: args.reread } : {}),
