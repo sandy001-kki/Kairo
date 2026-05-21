@@ -6,7 +6,14 @@ export default tseslint.config(
   {
     // Config files are not part of the typed project; linting them with the
     // type-aware service is unnecessary and noisy.
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'eslint.config.js', 'vitest.config.ts'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'coverage/**',
+      'eslint.config.js',
+      'vitest.config.ts',
+      'extensions/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

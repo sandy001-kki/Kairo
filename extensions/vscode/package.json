@@ -1,0 +1,88 @@
+{
+  "name": "kairo-vscode",
+  "displayName": "Kairo Inspect",
+  "description": "Read-only VS Code surface for Kairo's local .kairo/ engineering memory — sessions, checkpoints, briefs, leases, risk.",
+  "version": "0.9.0",
+  "publisher": "kairo",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0",
+    "node": ">=20"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:kairo.sessions",
+    "workspaceContains:.kairo/events.jsonl"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "kairo",
+          "title": "Kairo",
+          "icon": "$(database)"
+        }
+      ]
+    },
+    "views": {
+      "kairo": [
+        {
+          "id": "kairo.overview",
+          "name": "Overview"
+        },
+        {
+          "id": "kairo.sessions",
+          "name": "Sessions"
+        },
+        {
+          "id": "kairo.checkpoints",
+          "name": "Checkpoints"
+        },
+        {
+          "id": "kairo.leases",
+          "name": "Active leases"
+        },
+        {
+          "id": "kairo.risk",
+          "name": "Risk escalations"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "kairo.refresh",
+        "title": "Kairo: Refresh inspect views"
+      },
+      {
+        "command": "kairo.openBrief",
+        "title": "Kairo: Open latest continuation brief"
+      },
+      {
+        "command": "kairo.openCheckpoint",
+        "title": "Kairo: Open checkpoint"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "kairo.refresh",
+          "when": "view == kairo.sessions",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.5.4"
+  }
+}

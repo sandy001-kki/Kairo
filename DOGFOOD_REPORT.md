@@ -556,3 +556,58 @@ Budgets are **character counts**, not real tokens. They are a deterministic,
 tokeniser-agnostic local proxy; exact token cost depends on the model.
 Persisted `.kairo/` artefacts (events, checkpoints, telemetry) are not
 truncated — those remain the source of truth.
+
+---
+
+# v0.9.0 — Developer surfaces (web inspector + VS Code)
+
+Brought up `kairo-inspect` against this repo's own `.kairo/` and the
+inspect-test temp project. Verified the read-only contract end-to-end.
+
+## Local web inspector
+
+- Bound to `127.0.0.1:4173`. `curl http://127.0.0.1:4173/` returns the
+  overview page. Outbound network captured during the run: **zero requests**
+  (no CDN, no fonts, no analytics — the rendered HTML inlines all CSS).
+- CSP header observed on every response:
+  `default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'`.
+  `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer` also set.
+- Routes verified (200): `/`, `/sessions`, `/sessions/:id`, `/checkpoints`,
+  `/checkpoints/:id`, `/continuations/:name`, `/timeline?kind=checkpoints`,
+  `/graphs`, `/memory`, `/coordination`, `/risk`, `/events`. Unknown route
+  returns 404 with the same chrome.
+- **Determinism check**: two consecutive `GET /sessions` responses on the
+  same `.kairo/` were byte-identical (see `tests/inspect.test.ts`).
+- **No JS** in the rendered HTML — Mermaid graphs render as source in a
+  `<pre>` block; users paste into any Mermaid renderer.
+
+## VS Code extension
+
+- Tree views populate from `.kairo/sessions/*.json` and `.kairo/checkpoints/*.json`
+  on activation (no MCP connection required).
+- `vscode.workspace.createFileSystemWatcher(.kairo/**/*)` fires refresh on
+  every change — verified by running an MCP session in parallel and watching
+  the tree update.
+- Clicking a checkpoint opens its continuation brief as a regular markdown
+  document. No webview, no custom renderer, no hidden state.
+
+## Findings
+
+- **Determinism holds across surfaces.** Same `.kairo/` → byte-identical
+  HTML; tree view items derived from the same files yield the same labels
+  and ordering across refreshes.
+- **No write paths exist.** Grepping `src/inspect/` and `extensions/vscode/`
+  for `writeFile|append|writeAtomic|fetch\(POST|PUT|DELETE` returns nothing
+  in either surface — the only writers in the repo are `FileStorageAdapter`,
+  `RedactingAdapter`, and the telemetry sink, all reachable only via the MCP
+  tool layer.
+- **Token discipline respected.** The web inspector's `/memory` view caps the
+  "top chunks" table at 20 entries; `/events` caps at 500 most-recent —
+  consistent with the v0.8.2 compactness contract.
+
+## Honest scope
+
+v0.9.0 surfaces are **historical inspection** — no streams, no push, no
+WebSockets. Cloud sync / accounts / hosted backend / live collaboration are
+explicitly out of scope, not deferred. The MCP tool layer remains the only
+writer to `.kairo/`.

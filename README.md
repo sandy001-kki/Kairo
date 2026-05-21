@@ -16,6 +16,20 @@ the next agent an exact continuation brief instead of a blank slate.
 
 ## Status
 
+**v0.9.0 — Developer surfaces & operational inspection.** Two surfaces, both
+**read-only projections** over local `.kairo/` (ADR-0011): a zero-dep local web
+inspector (`kairo-inspect` binary, loopback only, no JS, no remote assets, CSP
+locked, deterministic HTML) and a VS Code extension under
+[`extensions/vscode/`](extensions/vscode/) with activity-bar tree views
+(Overview / Sessions / Checkpoints / Active leases / Risk escalations) that
+auto-refresh on `.kairo/` changes. Cursor is documentation-only — it speaks
+MCP, so the existing `kairo-mcp` binary is all it needs. Backend cognition +
+coordination state remains the source of truth; no surface writes. Explicitly
+out of scope (by design, not deferred): cloud sync, accounts, remote
+telemetry, hosted backend, live collaboration. See
+[SURFACES.md](docs/SURFACES.md) and
+[ADR-0011](docs/adr/0011-developer-surfaces.md).
+
 **v0.8.2 — Token efficiency as a core architecture principle.** The opposite
 failure mode of repeated rescans is a memory layer that bloats every prompt.
 Continuation briefs now have three modes — **`tiny`** (1500 chars: task / stop
@@ -183,7 +197,7 @@ default; commit it deliberately if you want shared team memory.
 3. When Kairo returns `CHECKPOINT_NOW`, call `kairo_checkpoint`.
 4. `kairo_session_end` writes the final checkpoint and continuation brief.
 
-## MCP surface (v0.8.2)
+## MCP surface (v0.9.0)
 
 | Tool                        | Purpose                                                              |
 | --------------------------- | -------------------------------------------------------------------- |

@@ -6,6 +6,50 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-05-21
+
+Developer surfaces & operational inspection. Two read-only projections over
+local `.kairo/`; no new persisted state, no network, no mutations. See
+[SURFACES.md](docs/SURFACES.md) and [ADR-0011](docs/adr/0011-developer-surfaces.md).
+
+### Added
+
+- **`src/inspect/`** — pure projection helpers (`InspectProjection`) over the
+  same primitives the MCP tools already use (`queryEngine`, `CoordinationManager`,
+  storage adapter). Read-only; deterministic; replay-safe.
+- **`kairo-inspect` CLI** — zero-dependency local HTTP inspector. Loopback only
+  by default (`127.0.0.1:4173`), CSP-locked (`default-src 'none'`), no JS, no
+  remote assets. Routes: `/`, `/sessions`, `/sessions/:id`, `/checkpoints`,
+  `/checkpoints/:id`, `/continuations/:name`, `/timeline?kind=`, `/graphs`,
+  `/graphs/:kind`, `/memory`, `/coordination`, `/risk`, `/events`,
+  `/retrieval/:id`. Two reads of the same `.kairo/` produce byte-identical HTML.
+- **VS Code extension** in `extensions/vscode/` (separate publishable package).
+  Activity-bar tree views for Overview / Sessions / Checkpoints / Active
+  leases / Risk escalations. Reads `.kairo/` directly via Node `fs`; does not
+  spawn or depend on the MCP server. Auto-refreshes on `.kairo/` changes via
+  `vscode.workspace.createFileSystemWatcher`. Click a checkpoint to open its
+  continuation brief.
+- **Cursor integration** via documentation only — Cursor speaks MCP, so the
+  existing `kairo-mcp` binary covers it. The VS Code extension also loads in
+  Cursor (it's a VS Code fork).
+
+### Changed
+
+- `package.json` exposes a new `kairo-inspect` bin entry pointing at
+  `dist/inspect/cli.js`.
+- Architecture core principles list (docs/ARCHITECTURE.md §2) grew a 7th
+  entry: **"Surfaces are projections."**
+
+### Notes
+
+- Honest scope: v0.9.0 surfaces are **historical inspection**, not real-time
+  observability or remote collaboration. No streams, no subscriptions, no push.
+- Explicitly out of scope — _by design, not deferred_: cloud sync, accounts,
+  remote telemetry, hosted backend, live collaboration, SaaS infrastructure.
+- 130/130 tests pass including a new `tests/inspect.test.ts` that boots the
+  HTTP server on a random port, asserts CSP headers, route shape, and
+  determinism (two reads of `/sessions` are byte-identical).
+
 ## [0.8.2] - 2026-05-20
 
 Token efficiency is now a **core architecture principle**. The opposite failure
@@ -442,7 +486,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.8.2...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/sandy001-kki/Kairo/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/sandy001-kki/Kairo/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/sandy001-kki/Kairo/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/sandy001-kki/Kairo/compare/v0.7.1...v0.8.0

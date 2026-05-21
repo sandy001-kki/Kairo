@@ -3,3 +3,5 @@ node_modules
 coverage
 .kairo
 CHANGELOG.md
+extensions/vscode/dist
+extensions/vscode/node_modules

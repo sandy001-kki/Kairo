@@ -33,6 +33,10 @@ what is left, and what is risky — and it hands the next agent an exact brief.
    continuity. Default to compact; require explicit opt-in for verbose. Reports go to
    files; prompts get pointers. Briefs have modes (`tiny` / `normal` / `deep`). See
    [ADR-0010](adr/0010-token-efficiency.md) and [TOKEN_EFFICIENCY.md](TOKEN_EFFICIENCY.md).
+7. **Surfaces are projections.** Developer surfaces (web inspector, VS Code, etc.) are
+   read-only views over deterministic local state. No surface introduces new persisted
+   state, mutates `.kairo/`, or reaches the network. See
+   [ADR-0011](adr/0011-developer-surfaces.md) and [SURFACES.md](SURFACES.md).
 
 ## 3. Layered architecture
 
@@ -111,8 +115,8 @@ CHECKPOINT_NOW`. The directive is attached to every tool response.
 | 0.7.1     | Cross-worker memory freshness (deterministic memory fingerprint)                                            |
 | 0.8.0     | Enterprise telemetry, analytics & team coordination                                                         |
 | 0.8.1     | Deterministic engineering introspection (read-only query layer)                                             |
-| **0.8.2** | Token efficiency as a core architecture principle — _this release_                                          |
-| 0.9.0     | IDE/dashboard surfaces (VS Code, Cursor, web)                                                               |
+| 0.8.2     | Token efficiency as a core architecture principle                                                           |
+| **0.9.0** | Developer surfaces & operational inspection (web inspector + VS Code) — _this release_                      |
 | 1.0.0     | Stable production release                                                                                   |
 
 Security was deliberately pulled into 0.1.0 rather than a later phase: every checkpoint
