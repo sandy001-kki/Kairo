@@ -6,6 +6,50 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-05-21
+
+First slice of v0.9.x stabilization: schema versioning, formal contracts, and
+corruption quarantine. See [SCHEMA.md](docs/SCHEMA.md) and
+[ADR-0012](docs/adr/0012-schema-versioning.md).
+
+### Added
+
+- **`src/contracts/`** — central schema constants (`schemas.ts`), zod schemas
+  (`zodSchemas.ts`), and a per-artefact migration registry (`migrations.ts`).
+  One module is the source of truth for what a "valid Kairo record" looks like.
+- **Explicit `schema` field on every persisted artefact**: `KairoEvent`,
+  `TelemetryEvent`, `AuditEntry`, `SessionState`, `Checkpoint` (legacy records
+  without it are accepted on read and tagged with the current version
+  automatically; old records on disk are migrated on the next write).
+- **Corruption quarantine** (`src/storage/quarantine.ts`,
+  `.kairo/quarantine/{file}.jsonl`): JSONL lines that fail to parse or
+  validate are appended to the quarantine log with line number, reason, and
+  raw contents — every healthy line in the file still loads.
+- **Read-side validation** at the storage-adapter seam via zod. Permissive on
+  unknown fields (forward-compat), strict on the required shape.
+- **`kairo-inspect` overview** now surfaces the quarantine count.
+
+### Changed
+
+- `FileStorageAdapter.readEvents` / `readTelemetry` / `readAudit` now route
+  through `readValidatedJsonl`, which validates + migrates + quarantines.
+  Torn-trailing-line tolerance (the v0.1 crash-safety contract) is preserved
+  unchanged.
+- `loadCheckpoint` / `loadLatestCheckpoint` / `loadSessionSnapshot` migrate
+  records on read so consumers always see the current schema shape.
+- `saveCheckpoint` / `saveSessionSnapshot` / `audit` tag records with the
+  current schema constant on write.
+
+### Notes
+
+- **Back-compat guarantee**: patch versions (v0.9.x) never bump a schema
+  constant. Records written by any v0.9.x are readable by any other v0.9.x.
+- **Honest scope**: migrations are on-read only; old on-disk records remain
+  byte-identical until rewritten. Zod validation is structural, not semantic.
+- 137/137 tests pass, including a new `tests/schema.test.ts` exercising
+  legacy-record reads, corruption quarantine, and torn-trailing-line
+  invariants.
+
 ## [0.9.0] - 2026-05-21
 
 Developer surfaces & operational inspection. Two read-only projections over
@@ -486,7 +530,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/sandy001-kki/Kairo/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/sandy001-kki/Kairo/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/sandy001-kki/Kairo/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/sandy001-kki/Kairo/compare/v0.8.0...v0.8.1

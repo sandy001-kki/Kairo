@@ -37,6 +37,12 @@ what is left, and what is risky — and it hands the next agent an exact brief.
    read-only views over deterministic local state. No surface introduces new persisted
    state, mutates `.kairo/`, or reaches the network. See
    [ADR-0011](adr/0011-developer-surfaces.md) and [SURFACES.md](SURFACES.md).
+8. **Schemas are versioned, migrations are pure.** Every persisted artefact carries an
+   explicit `schema` field. Reads validate at the storage-adapter seam (zod) and run
+   through a per-artefact migration registry — corrupt or invalid lines are quarantined,
+   not silently dropped. Patch versions never bump schemas; minor versions bump only
+   when a same-release migration ships. See
+   [ADR-0012](adr/0012-schema-versioning.md) and [SCHEMA.md](SCHEMA.md).
 
 ## 3. Layered architecture
 
@@ -116,7 +122,8 @@ CHECKPOINT_NOW`. The directive is attached to every tool response.
 | 0.8.0     | Enterprise telemetry, analytics & team coordination                                                         |
 | 0.8.1     | Deterministic engineering introspection (read-only query layer)                                             |
 | 0.8.2     | Token efficiency as a core architecture principle                                                           |
-| **0.9.0** | Developer surfaces & operational inspection (web inspector + VS Code) — _this release_                      |
+| 0.9.0     | Developer surfaces & operational inspection (web inspector + VS Code)                                       |
+| **0.9.1** | Schema versioning, formal contracts & corruption quarantine — _this release_                                |
 | 1.0.0     | Stable production release                                                                                   |
 
 Security was deliberately pulled into 0.1.0 rather than a later phase: every checkpoint

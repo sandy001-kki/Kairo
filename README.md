@@ -16,6 +16,21 @@ the next agent an exact continuation brief instead of a blank slate.
 
 ## Status
 
+**v0.9.1 — Schema versioning, formal contracts & corruption quarantine.**
+First slice of v0.9.x stabilization (advanced prototype → durable
+infrastructure). Every persisted artefact (`KairoEvent`, `TelemetryEvent`,
+`AuditEntry`, `SessionState`, `Checkpoint`, `RepoIntelligence`, `VectorIndex`)
+now carries an explicit `schema` field; constants are centralised in
+[`src/contracts/schemas.ts`](src/contracts/schemas.ts). Reads validate at the
+storage-adapter seam via zod (permissive on unknowns, strict on the required
+shape) and run through a pure per-artefact migration registry so legacy
+records — and future schema bumps — read identically. Corrupt or invalid
+JSONL lines are quarantined to `.kairo/quarantine/{file}.jsonl` (with line
+number + reason + raw contents); the torn-trailing-line crash-safety contract
+is preserved. `kairo-inspect` surfaces quarantine count on the overview. See
+[SCHEMA.md](docs/SCHEMA.md) and
+[ADR-0012](docs/adr/0012-schema-versioning.md).
+
 **v0.9.0 — Developer surfaces & operational inspection.** Two surfaces, both
 **read-only projections** over local `.kairo/` (ADR-0011): a zero-dep local web
 inspector (`kairo-inspect` binary, loopback only, no JS, no remote assets, CSP
@@ -197,7 +212,7 @@ default; commit it deliberately if you want shared team memory.
 3. When Kairo returns `CHECKPOINT_NOW`, call `kairo_checkpoint`.
 4. `kairo_session_end` writes the final checkpoint and continuation brief.
 
-## MCP surface (v0.9.0)
+## MCP surface (v0.9.1)
 
 | Tool                        | Purpose                                                              |
 | --------------------------- | -------------------------------------------------------------------- |

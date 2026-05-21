@@ -42,6 +42,8 @@ export interface KairoEvent<TPayload = unknown> {
 
 /** A redaction/lifecycle audit record. Never contains secret values. */
 export interface AuditEntry {
+  /** Schema version (ADR-0012). Optional for back-compat with pre-v0.9.1 records. */
+  readonly schema?: number;
   readonly ts: string;
   readonly kind: 'redaction' | 'lifecycle';
   readonly message: string;

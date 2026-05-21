@@ -111,6 +111,11 @@ export function renderOverview(o: InspectOverview): string {
   <dt>Telemetry</dt><dd>${o.telemetryCount}</dd>
   <dt>Sessions</dt><dd>${o.sessionCount}</dd>
   <dt>Checkpoints</dt><dd>${o.checkpointCount}</dd>
+  <dt>Quarantine</dt><dd>${
+    o.quarantineCount === 0
+      ? '<span class="pill low">0</span>'
+      : `<span class="pill high">${o.quarantineCount}</span> see <code>.kairo/quarantine/</code>`
+  }</dd>
   <dt>Latest session</dt><dd>${o.latestSessionId ? `<code>${esc(o.latestSessionId)}</code>` : '<span class="empty">none</span>'}</dd>
   <dt>Latest checkpoint</dt><dd>${
     o.latestCheckpointId

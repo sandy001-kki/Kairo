@@ -1,5 +1,6 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { kairoPaths, type KairoPaths } from '../storage/paths.js';
 import { FileStorageAdapter } from '../storage/fileStorageAdapter.js';
 import { CoordinationManager } from '../core/coordination/coordinationManager.js';
@@ -54,6 +55,7 @@ export class InspectProjection {
         telemetryCount: 0,
         sessionCount: 0,
         checkpointCount: 0,
+        quarantineCount: 0,
         latestCheckpointId: undefined,
         latestSessionId: undefined,
         intelligence: undefined,
@@ -68,6 +70,17 @@ export class InspectProjection {
     const latestCheckpoint = await this.latestCheckpoint();
     const latestSessionEv = [...events].reverse().find((e) => e.type === 'session.started');
     const intelligence = await this.readIntelligence();
+    const quarantineFiles = await safeReaddir(this.paths.quarantineDir);
+    let quarantineCount = 0;
+    for (const f of quarantineFiles) {
+      if (!f.endsWith('.jsonl')) continue;
+      try {
+        const raw = await readFile(join(this.paths.quarantineDir, f), 'utf8');
+        quarantineCount += raw.split('\n').filter((l) => l.trim().length > 0).length;
+      } catch {
+        /* ignore */
+      }
+    }
     return {
       projectRoot: this.paths.root,
       hasKairo: true,
@@ -75,6 +88,7 @@ export class InspectProjection {
       telemetryCount: telemetry.length,
       sessionCount: sessionFiles.filter((f) => f.endsWith('.json')).length,
       checkpointCount: checkpointFiles.filter((f) => f.endsWith('.json')).length,
+      quarantineCount,
       latestCheckpointId: latestCheckpoint?.id,
       latestSessionId: latestSessionEv?.sessionId,
       intelligence,
@@ -347,6 +361,8 @@ export interface InspectOverview {
   telemetryCount: number;
   sessionCount: number;
   checkpointCount: number;
+  /** Number of quarantined corrupt/invalid records under `.kairo/quarantine/` (ADR-0012). */
+  quarantineCount: number;
   latestCheckpointId: string | undefined;
   latestSessionId: string | undefined;
   intelligence: IntelligenceSummary | undefined;

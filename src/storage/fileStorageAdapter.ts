@@ -1,5 +1,5 @@
 import { mkdir, appendFile, writeFile, readFile, readdir, rename } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 import type { StorageAdapter } from './storageAdapter.js';
 import { kairoPaths, type KairoPaths } from './paths.js';
 import type { AuditEntry, KairoEvent } from '../types/events.js';
@@ -8,6 +8,21 @@ import type { Checkpoint, SessionState } from '../types/domain.js';
 import type { RepoIntelligence } from '../core/repo/types.js';
 import type { VectorIndex } from '../core/vector/types.js';
 import { logger } from '../utils/logger.js';
+import { FileQuarantineSink, type QuarantineSink } from './quarantine.js';
+import {
+  AuditEntryZ,
+  KairoEventZ,
+  SessionStateZ,
+  TelemetryEventZ,
+} from '../contracts/zodSchemas.js';
+import {
+  migrateAudit,
+  migrateCheckpoint,
+  migrateEvent,
+  migrateSession,
+  migrateTelemetry,
+} from '../contracts/migrations.js';
+import type { ZodTypeAny } from 'zod';
 
 /**
  * Local-first, event-sourced file backend.
@@ -20,9 +35,11 @@ import { logger } from '../utils/logger.js';
  */
 export class FileStorageAdapter implements StorageAdapter {
   private readonly paths: KairoPaths;
+  private readonly quarantine: QuarantineSink;
 
-  constructor(projectRoot?: string) {
+  constructor(projectRoot?: string, quarantine?: QuarantineSink) {
     this.paths = kairoPaths(projectRoot);
+    this.quarantine = quarantine ?? new FileQuarantineSink(this.paths.quarantineDir);
   }
 
   async init(): Promise<void> {
@@ -35,6 +52,7 @@ export class FileStorageAdapter implements StorageAdapter {
       this.paths.intelligenceDir,
       this.paths.graphsDir,
       this.paths.vectorDir,
+      this.paths.quarantineDir,
     ]) {
       await mkdir(dir, { recursive: true });
     }
@@ -45,47 +63,43 @@ export class FileStorageAdapter implements StorageAdapter {
   }
 
   async readEvents(): Promise<KairoEvent[]> {
-    const raw = await this.readFileOrEmpty(this.paths.events);
-    if (raw.length === 0) return [];
-    const lines = raw.split('\n').filter((l) => l.trim().length > 0);
-    const events: KairoEvent[] = [];
-    for (let i = 0; i < lines.length; i++) {
-      try {
-        events.push(JSON.parse(lines[i] as string) as KairoEvent);
-      } catch {
-        if (i === lines.length - 1) {
-          logger.warn('Discarding torn trailing event-log line (crash recovery)');
-        } else {
-          logger.error(`Corrupt event-log line ${i + 1}; skipping`);
-        }
-      }
-    }
-    return events;
+    return this.readValidatedJsonl(this.paths.events, KairoEventZ, migrateEvent);
   }
 
   async saveSessionSnapshot(state: SessionState): Promise<void> {
-    await this.writeAtomic(this.paths.sessionFile(state.id), JSON.stringify(state, null, 2));
+    const tagged: SessionState = state.schema ? state : { ...state, schema: 1 };
+    await this.writeAtomic(this.paths.sessionFile(state.id), JSON.stringify(tagged, null, 2));
   }
 
   async loadSessionSnapshot(id: string): Promise<SessionState | undefined> {
-    return this.readJson<SessionState>(this.paths.sessionFile(id));
+    const raw = await this.readJson<unknown>(this.paths.sessionFile(id));
+    if (raw === undefined) return undefined;
+    const parsed = SessionStateZ.safeParse(raw);
+    if (!parsed.success) {
+      logger.warn(`Session snapshot ${id} failed schema validation; using as-is`);
+      return migrateSession(raw);
+    }
+    return migrateSession(parsed.data);
   }
 
   async saveCheckpoint(checkpoint: Checkpoint): Promise<void> {
+    const tagged: Checkpoint = checkpoint.schema ? checkpoint : { ...checkpoint, schema: 1 };
     await this.writeAtomic(
       this.paths.checkpointFile(checkpoint.id),
-      JSON.stringify(checkpoint, null, 2),
+      JSON.stringify(tagged, null, 2),
     );
   }
 
   async loadCheckpoint(id: string): Promise<Checkpoint | undefined> {
-    return this.readJson<Checkpoint>(this.paths.checkpointFile(id));
+    const raw = await this.readJson<unknown>(this.paths.checkpointFile(id));
+    return raw === undefined ? undefined : migrateCheckpoint(raw);
   }
 
   async loadLatestCheckpoint(): Promise<Checkpoint | undefined> {
     const latest = await this.latestFile(this.paths.checkpointsDir, '.json');
     if (!latest) return undefined;
-    return this.readJson<Checkpoint>(join(this.paths.checkpointsDir, latest));
+    const raw = await this.readJson<unknown>(join(this.paths.checkpointsDir, latest));
+    return raw === undefined ? undefined : migrateCheckpoint(raw);
   }
 
   async saveContinuation(name: string, markdown: string): Promise<string> {
@@ -134,11 +148,12 @@ export class FileStorageAdapter implements StorageAdapter {
   }
 
   async audit(entry: AuditEntry): Promise<void> {
-    await appendFile(this.paths.audit, `${JSON.stringify(entry)}\n`, 'utf8');
+    const tagged: AuditEntry = entry.schema ? entry : { ...entry, schema: 1 };
+    await appendFile(this.paths.audit, `${JSON.stringify(tagged)}\n`, 'utf8');
   }
 
   async readAudit(): Promise<AuditEntry[]> {
-    return this.readJsonl<AuditEntry>(this.paths.audit);
+    return this.readValidatedJsonl(this.paths.audit, AuditEntryZ, migrateAudit);
   }
 
   async appendTelemetry(event: TelemetryEvent): Promise<void> {
@@ -146,7 +161,7 @@ export class FileStorageAdapter implements StorageAdapter {
   }
 
   async readTelemetry(): Promise<TelemetryEvent[]> {
-    return this.readJsonl<TelemetryEvent>(this.paths.telemetry);
+    return this.readValidatedJsonl(this.paths.telemetry, TelemetryEventZ, migrateTelemetry);
   }
 
   async saveReport(name: string, markdown: string): Promise<void> {
@@ -169,18 +184,61 @@ export class FileStorageAdapter implements StorageAdapter {
     }
   }
 
-  /** Tolerant JSONL reader (skips a torn trailing line — crash recovery). */
-  private async readJsonl<T>(path: string): Promise<T[]> {
+  /**
+   * Tolerant + validating JSONL reader (ADR-0012). Corrupt or invalid lines
+   * are quarantined to `.kairo/quarantine/{source}.jsonl` and the rest of
+   * the file is still read. A torn trailing line — the v0.1 crash-safety
+   * contract — remains silent.
+   */
+  private async readValidatedJsonl<T>(
+    path: string,
+    schema: ZodTypeAny,
+    migrate: (r: unknown) => T,
+  ): Promise<T[]> {
     const raw = await this.readFileOrEmpty(path);
     if (raw.length === 0) return [];
-    const lines = raw.split('\n').filter((l) => l.trim().length > 0);
+    // Don't filter empty lines yet — we need 1-based line numbers that
+    // match the on-disk position for the quarantine record.
+    const allLines = raw.split('\n');
+    const source = basename(path);
     const out: T[] = [];
-    for (let i = 0; i < lines.length; i++) {
+    for (let i = 0; i < allLines.length; i++) {
+      const line = allLines[i] ?? '';
+      if (line.trim().length === 0) continue;
+      let parsed: unknown;
       try {
-        out.push(JSON.parse(lines[i] as string) as T);
+        parsed = JSON.parse(line);
       } catch {
-        if (i !== lines.length - 1) logger.error(`Corrupt JSONL line ${i + 1} in ${path}`);
+        const isTorn = i === allLines.length - 1 && !raw.endsWith('\n');
+        if (isTorn) {
+          logger.warn(`Discarding torn trailing line in ${source} (crash recovery)`);
+        } else {
+          await this.quarantine.write({
+            detectedAt: new Date().toISOString(),
+            source,
+            line: i + 1,
+            reason: 'parse',
+            raw: line,
+          });
+        }
+        continue;
       }
+      const result = schema.safeParse(parsed);
+      if (!result.success) {
+        await this.quarantine.write({
+          detectedAt: new Date().toISOString(),
+          source,
+          line: i + 1,
+          reason: 'validation',
+          detail: result.error.issues
+            .slice(0, 3)
+            .map((iss) => `${iss.path.join('.')}: ${iss.message}`)
+            .join('; '),
+          raw: line,
+        });
+        continue;
+      }
+      out.push(migrate(result.data));
     }
     return out;
   }

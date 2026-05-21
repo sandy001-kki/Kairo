@@ -72,6 +72,8 @@ export interface PressureSnapshot {
 export type SessionStatus = 'active' | 'checkpointed' | 'ended';
 
 export interface SessionState {
+  /** Schema version (ADR-0012). Optional for back-compat with pre-v0.9.1 records. */
+  schema?: number;
   id: string;
   agent: AgentKind;
   task: string;
@@ -100,6 +102,8 @@ export interface SessionState {
 export type CheckpointReason = 'manual' | 'pressure' | 'session-end';
 
 export interface Checkpoint {
+  /** Schema version (ADR-0012). Optional for back-compat with pre-v0.9.1 records. */
+  schema?: number;
   id: string;
   sessionId: string;
   agent: AgentKind;

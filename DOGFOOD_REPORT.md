@@ -611,3 +611,57 @@ v0.9.0 surfaces are **historical inspection** — no streams, no push, no
 WebSockets. Cloud sync / accounts / hosted backend / live collaboration are
 explicitly out of scope, not deferred. The MCP tool layer remains the only
 writer to `.kairo/`.
+
+---
+
+# v0.9.1 — Schema versioning + corruption quarantine
+
+First slice of v0.9.x stabilization. Verified the read-side validation +
+migration + quarantine path against synthetic fixtures and the e2e flow.
+
+## Migration path (legacy → current)
+
+- Synthetic `events.jsonl` with three records: two missing the `schema`
+  field (legacy v0 shape), one carrying `schema: 1`. All three read back
+  with `schema === 1`; the existing fields are byte-preserved.
+- Synthetic legacy `Checkpoint` (no `schema` field) reads through
+  `loadCheckpoint` and emerges with `schema: 1`. Round-trip via
+  `saveCheckpoint` writes `"schema": 1` to disk.
+
+## Corruption quarantine
+
+- Mid-file corrupt JSONL line inserted between two healthy events. After
+  `readEvents()`:
+  - Both healthy events present in the returned list (in append order).
+  - `.kairo/quarantine/events.jsonl` exists and contains the raw corrupt
+    line plus metadata: `detectedAt`, `source: "events.jsonl"`, `line: 2`,
+    `reason: "parse"`, `raw: '{"id": "broken", this is not json'`.
+- Inspect overview reports a non-zero quarantine count when the
+  quarantine dir is non-empty.
+
+## Torn-trailing-line invariant preserved
+
+- Fixture: one complete JSON line + a partial second line with no
+  terminating newline (the canonical mid-append crash shape).
+- After `readEvents()`: one event returned, **no quarantine entry**, just
+  the WARN log line — same behaviour as v0.1.
+
+## Findings
+
+- **No false positives.** Healthy logs (including the e2e flow's 30+
+  events + 6 telemetry events) generate zero quarantine entries.
+- **Replay-identity preserved.** Two reads of the same `.kairo/` produce
+  the same event sequence; legacy → migrated reads are idempotent.
+- **Zod cost is small.** Total `npm test` runtime moved from ~5.5s to
+  ~6.8s with the new validation in the hot path — acceptable for the
+  durability guarantees gained.
+
+## Honest scope
+
+- Migrations are on-read only; old on-disk records remain byte-identical
+  until rewritten. A long-lived `.kairo/` will carry mixed on-disk
+  versions for some time.
+- Zod validation is structural ("field X must be a number"), not
+  semantic ("the value is internally consistent with field Y").
+- Quarantine is last-resort. Append-only writes + `writeAtomic` +
+  torn-line tolerance remain the primary defences.

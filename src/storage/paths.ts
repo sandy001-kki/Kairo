@@ -18,6 +18,7 @@ export interface KairoPaths {
   graphsDir: string;
   vectorDir: string;
   vectorIndexFile: string;
+  quarantineDir: string;
   sessionFile: (id: string) => string;
   checkpointFile: (id: string) => string;
   continuationFile: (name: string) => string;
@@ -48,6 +49,7 @@ export function kairoPaths(explicitRoot?: string): KairoPaths {
     graphsDir: join(base, 'graphs'),
     vectorDir: join(base, 'vector'),
     vectorIndexFile: join(base, 'vector', 'index.json'),
+    quarantineDir: join(base, 'quarantine'),
     sessionFile: (id) => join(base, 'sessions', `${id}.json`),
     checkpointFile: (id) => join(base, 'checkpoints', `${id}.json`),
     continuationFile: (name) => join(base, 'continuations', name),
