@@ -25,6 +25,7 @@ import { loadPlugins } from '../plugins/loader.js';
 import { STABILITY, stabilityOf } from '../contracts/stability.js';
 import { SERVER_VERSION } from '../server/createServer.js';
 import { parse as parseFlagsImpl, type FlagSpec } from './flags.js';
+import { chooseMcpSpec, classifyInstalledSpec, detect, type McpInstallForm } from './initSpec.js';
 import type { CommandContext, CommandResult, CommandSpec } from './types.js';
 
 const NO_KAIRO_HINT = 'Run `kairo init` to wire Kairo into this project.';
@@ -40,6 +41,20 @@ function requireKairo(ctx: CommandContext): boolean {
 function shortId(id: string | undefined, n = 12): string {
   if (!id) return '-';
   return id.length > n ? id.slice(0, n) + '…' : id;
+}
+
+/** Human-readable label for the v1.4.0 install form (init / doctor). */
+function renderInstallForm(ctx: CommandContext, form: McpInstallForm | 'unknown'): string {
+  switch (form) {
+    case 'local':
+      return ctx.out.green('local') + ctx.out.dim(' (node_modules/kairo-mcp)');
+    case 'global':
+      return ctx.out.green('global') + ctx.out.dim(' (kairo-mcp on PATH)');
+    case 'npx':
+      return ctx.out.yellow('npx') + ctx.out.dim(' (fetches on first run)');
+    default:
+      return ctx.out.dim('unknown');
+  }
 }
 
 // ── version ────────────────────────────────────────────────────────────
@@ -693,15 +708,20 @@ const initCmd: CommandSpec = {
       }
     }
     mcp.mcpServers ??= {};
+
+    // v1.4.0: detect the install environment and pick the most reliable
+    // runnable command (ADR-0018). Three forms tried in order:
+    //   1. local install  (./node_modules/kairo-mcp/dist/index.js)
+    //   2. global PATH    (kairo-mcp resolves via where/which)
+    //   3. fallback npx   (works in any directory, any OS)
+    const chosen = chooseMcpSpec(detect(ctx.projectRoot));
+    result.mcpInstallForm = chosen.form;
+
     if (mcp.mcpServers.kairo && !force) {
       ctx.out.info(ctx.out.dim('  .mcp.json already declares kairo — pass --force to overwrite.'));
       result.mcpJson = 'skipped';
     } else {
-      mcp.mcpServers.kairo = {
-        command: 'node',
-        args: ['./node_modules/kairo-mcp/dist/index.js'],
-        env: { KAIRO_PROJECT_ROOT: '.' },
-      };
+      mcp.mcpServers.kairo = chosen.spec;
       await writeFile(mcpPath, JSON.stringify(mcp, null, 2) + '\n', 'utf8');
       result.mcpJson = 'written';
     }
@@ -730,6 +750,7 @@ const initCmd: CommandSpec = {
     ctx.out.heading('Initialised');
     ctx.out.kv([
       ['.mcp.json', String(result.mcpJson)],
+      ['mcp form', renderInstallForm(ctx, chosen.form)],
       ['.gitignore', String(result.gitignore)],
       ['mcp host', host === 'none' ? ctx.out.dim('not detected') : ctx.out.green(host)],
     ]);
@@ -793,29 +814,45 @@ const doctorCmd: CommandSpec = {
       detail: existsSync(pkgJson) ? root : `no package.json at ${root}`,
     });
 
-    // Consumer install path OR "I am running doctor from inside the kairo-mcp
-    // dev repo itself" (where dist/ is at the root, not under node_modules).
+    // v1.4.0: `kairo-mcp` can be reached three ways. Doctor accepts any
+    // of them as "installed". Order mirrors initSpec.chooseMcpSpec:
+    //   1. local node_modules install
+    //   2. global PATH install (npm install -g kairo-mcp)
+    //   3. running doctor from inside the kairo-mcp dev repo itself
+    const det = detect(root);
     const consumerDist = join(root, 'node_modules', 'kairo-mcp', 'dist', 'index.js');
     const selfDist = join(root, 'dist', 'index.js');
-    let mcpDist: string | undefined;
-    if (existsSync(consumerDist)) mcpDist = consumerDist;
-    else if (existsSync(selfDist)) mcpDist = selfDist;
-    checks.push({
-      name: 'kairo-mcp installed',
-      ok: mcpDist !== undefined,
-      detail:
-        mcpDist ??
-        `run \`npm install github:sandy001-kki/Kairo#v${SERVER_VERSION}\` in this project`,
-    });
+    let installDetail: string;
+    let installOk: boolean;
+    if (det.hasLocalInstall) {
+      installOk = true;
+      installDetail = `local: ${consumerDist}`;
+    } else if (det.hasGlobalBin) {
+      installOk = true;
+      installDetail = 'global: kairo-mcp on PATH';
+    } else if (existsSync(selfDist)) {
+      installOk = true;
+      installDetail = `dev repo: ${selfDist}`;
+    } else {
+      installOk = false;
+      installDetail =
+        'install one of: `npm install -g kairo-mcp` (recommended), or local `npm install kairo-mcp`';
+    }
+    checks.push({ name: 'kairo-mcp installed', ok: installOk, detail: installDetail });
 
     const mcpJsonPath = join(root, '.mcp.json');
     let mcpWired = false;
+    let mcpForm: McpInstallForm | 'unknown' = 'unknown';
     if (existsSync(mcpJsonPath)) {
       try {
         const parsed = JSON.parse(await readFile(mcpJsonPath, 'utf8')) as {
-          mcpServers?: Record<string, unknown>;
+          mcpServers?: { kairo?: unknown };
         };
-        mcpWired = Boolean(parsed.mcpServers?.kairo);
+        const kairoEntry = parsed.mcpServers?.kairo;
+        if (kairoEntry !== undefined) {
+          mcpWired = true;
+          mcpForm = classifyInstalledSpec(kairoEntry);
+        }
       } catch {
         mcpWired = false;
       }
@@ -823,7 +860,7 @@ const doctorCmd: CommandSpec = {
     checks.push({
       name: '.mcp.json wires kairo',
       ok: mcpWired,
-      detail: mcpWired ? mcpJsonPath : 'run `kairo init`',
+      detail: mcpWired ? `${mcpJsonPath} (${mcpForm} form)` : 'run `kairo init`',
     });
 
     const paths = kairoPaths(root);

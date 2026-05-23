@@ -6,6 +6,91 @@ All notable changes to Kairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-05-21
+
+**Cross-language MCP bootstrap reliability.** First non-Node-project
+dogfood (a Python repo on Windows + Claude Code) caught a real bug:
+`kairo init` always wrote `.mcp.json` referencing `./node_modules/
+kairo-mcp/dist/index.js`, which doesn't exist in Python / Rust / Go /
+Java / Ruby / empty-directory projects — i.e. most projects an AI
+coding agent works in. Claude Code spawned the MCP server, Node
+returned `MODULE_NOT_FOUND`, the connection died with no useful
+remediation hint.
+
+v1.4.0 is **purely a reliability fix**. No new MCP tools, no new
+schemas, no new persisted artefacts, no stability registry changes,
+no new behaviour at runtime. The only change is the install-time
+logic that picks the right `.mcp.json` shape. See
+[ADR-0018](docs/adr/0018-cross-language-mcp-bootstrap.md).
+
+### Fixed
+
+- **`kairo init` now detects the install environment** and writes one
+  of three valid `.mcp.json` forms, tried in order:
+  1. **local** — `command: "node", args: ["./node_modules/kairo-mcp/
+     dist/index.js"]` when the local install exists (Node project
+     that ran `npm install kairo-mcp` locally; old behaviour preserved).
+  2. **global** — `command: "kairo-mcp"` when `kairo-mcp` resolves
+     via PATH (i.e. `npm install -g kairo-mcp` is on the developer's
+     machine — recommended).
+  3. **npx** — `command: "npx", args: ["-y", "kairo-mcp"]` as a
+     fallback. Works in any directory, any OS, regardless of prior
+     install. npx fetches on first run; subsequent invocations use
+     its cache.
+  Detection is cross-platform: `where` on Windows, `which` on POSIX.
+
+- **`kairo doctor` recognises all three forms** on the `.mcp.json
+  wires kairo` check, and reports which form is in use (e.g.
+  `(global form)`). The `kairo-mcp installed` check now passes when
+  any of the three install paths is reachable, with a remediation
+  hint specific to which one is missing.
+
+### Added
+
+- **`src/cli/initSpec.ts`** — pure-data spec generator + detection
+  helper. Two exported functions: `detect(projectRoot)` returns a
+  `DetectionResult` (two booleans), `chooseMcpSpec(detection)` is a
+  pure function from detection to MCP server spec.
+  `classifyInstalledSpec(entry)` recognises any of the three v1.4.0
+  forms in an existing `.mcp.json` (used by doctor).
+
+- **12 new tests** in `tests/initSpec.test.ts`: 5 pure-function tests
+  on `chooseMcpSpec`, 3 integration tests on `detect()` against real
+  temp directories (Node, Python, empty), 4 classification tests on
+  `classifyInstalledSpec` for the doctor recognition path.
+
+- **`kairo init` output** gains an `mcp form` row in the kv block —
+  visible signal of which path was chosen. JSON output adds an
+  `mcpInstallForm` field; existing fields keep their semantics
+  (back-compat).
+
+- **README "Quick start" table** documents the three forms and when
+  each fires.
+
+- **README "Troubleshooting" section** — four common installation
+  symptoms with one-line fixes for each: `/mcp` failed,
+  `kairo: command not found`, `mcp host: not detected`,
+  `MODULE_NOT_FOUND` on pre-v1.4.0 builds.
+
+### Changed
+
+- **`kairo init`'s end-to-end CLI test** was relaxed to accept any of
+  the three valid commands (`node`, `kairo-mcp`, `npx`). It was
+  previously locked to `node`, which is now only one valid outcome.
+  The 12 new initSpec tests cover the full matrix deterministically.
+
+### Notes
+
+- **205/205 tests pass** (up from 193 in v1.3.1: +12 new initSpec
+  tests).
+- **No tarball semantics change.** The published `kairo-mcp@x` package
+  is unchanged at the file level; v1.4.0 only changes install-time
+  logic.
+- Found by the first non-Node-project dogfood (an
+  `image_editor_python` repo on Windows + Claude Code). The fix loop
+  — symptom → diagnosis → ADR → tests → release — closed within the
+  same evening. This is the maintenance pattern v1.x is designed for.
+
 ## [1.3.1] - 2026-05-21
 
 Docs-only patch. v1.3.0 published `kairo-mcp` to npm; v1.3.1 reflects
@@ -1119,7 +1204,8 @@ nestjs/nest). See [DOGFOOD_REPORT.md](DOGFOOD_REPORT.md).
   `kairo_continuity` cooperation prompt.
 - Project documentation, ADRs, CI (lint/typecheck/test/build) and release workflows.
 
-[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/sandy001-kki/Kairo/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/sandy001-kki/Kairo/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/sandy001-kki/Kairo/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/sandy001-kki/Kairo/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/sandy001-kki/Kairo/compare/v1.1.3...v1.2.0

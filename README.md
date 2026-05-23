@@ -7,8 +7,8 @@
 [![npm](https://img.shields.io/npm/v/kairo-mcp.svg?color=cb3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/kairo-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/kairo-mcp.svg?color=cb3837)](https://www.npmjs.com/package/kairo-mcp)
 [![Latest release](https://img.shields.io/github/v/release/sandy001-kki/Kairo?display_name=tag&sort=semver&color=blue)](https://github.com/sandy001-kki/Kairo/releases)
-[![Tests](https://img.shields.io/badge/tests-193%20passing-brightgreen)](tests)
-[![ADRs](https://img.shields.io/badge/ADRs-17-informational)](docs/adr)
+[![Tests](https://img.shields.io/badge/tests-205%20passing-brightgreen)](tests)
+[![ADRs](https://img.shields.io/badge/ADRs-18-informational)](docs/adr)
 [![MCP tools](https://img.shields.io/badge/MCP%20tools-41-blueviolet)](docs/API_STABILITY.md)
 [![Stable surface](https://img.shields.io/badge/stable-33%20tools%20%2B%2014%20routes-success)](docs/API_STABILITY.md)
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white)](package.json)
@@ -135,12 +135,22 @@ kairo doctor
 > builds from the latest commit on `main` instead of the published npm
 > version. Same `kairo` CLI; identical behaviour.
 
-`kairo init` detects your MCP host (Claude Code, Cursor, …) and prints a
-3-step "next steps" block. Output looks like:
+`kairo init` works in **any** project type — Node, Python, Rust, Go,
+empty, anything. It detects your environment and picks the most reliable
+way to launch the MCP server (since v1.4.0):
+
+| Detected environment                            | `.mcp.json` form                              | When this fires                                                       |
+| ----------------------------------------------- | --------------------------------------------- | --------------------------------------------------------------------- |
+| `./node_modules/kairo-mcp/dist/index.js` exists | `node ./node_modules/kairo-mcp/dist/index.js` | Node project that ran `npm install kairo-mcp` locally.                |
+| `kairo-mcp` on PATH                             | `command: "kairo-mcp"`                        | Any project after `npm install -g kairo-mcp` (recommended).           |
+| neither                                         | `npx -y kairo-mcp`                            | Empty repo, Python repo, no install at all. npx fetches on first run. |
+
+Output looks like:
 
 ```
 Initialised
   .mcp.json:   written
+  mcp form:    global (kairo-mcp on PATH)
   .gitignore:  appended
   mcp host:    claude
 
@@ -603,6 +613,94 @@ calls no LLM.
 
 **Q: What's the licence?**
 MIT. See [`LICENSE`](LICENSE).
+
+---
+
+## Troubleshooting
+
+The most common installation issues, with the one-line fix for each.
+
+### `/mcp` shows `kairo · ✘ failed`
+
+The MCP host can't launch the `kairo-mcp` server. Run `kairo doctor`; it
+diagnoses the actual cause in five checks.
+
+Most frequent cause (especially in non-Node projects like Python / Rust /
+Go before v1.4.0): `.mcp.json` referenced `./node_modules/kairo-mcp/dist/
+index.js` which doesn't exist in that project type. **Fix:**
+
+```bash
+kairo init --force      # v1.4.0+ rewrites .mcp.json with the right form
+```
+
+v1.4.0 picks one of three forms (`local` / `global` / `npx`) based on
+your environment, so `kairo init --force` resolves the bad path
+automatically. See the _Quick start_ table above for what each form
+does.
+
+### `kairo: command not found` after `npm install`
+
+You ran `npm install kairo-mcp` (local) rather than `npm install -g
+kairo-mcp` (global). Either:
+
+```bash
+# Option A: switch to global install (recommended)
+npm install -g kairo-mcp
+kairo --version
+
+# Option B: keep local install, call via local bin path
+./node_modules/.bin/kairo --version
+
+# Option C: no install at all
+npx -p kairo-mcp kairo --version
+```
+
+### `kairo init` says `mcp host: not detected`
+
+`kairo init` looks for `claude` on PATH to print host-specific next
+steps. If your shell can't find it (e.g. inside a Python venv that
+shadows your global PATH), the field shows `not detected`. **This is
+informational only** — the `.mcp.json` is still written correctly and
+Claude Code will pick it up when you open the project. To verify:
+
+```bash
+where claude      # Windows
+which claude      # macOS / Linux
+```
+
+If the command resolves outside the venv but not inside, your venv's
+activation script is overriding PATH — common with Conda and some
+pyenv configurations.
+
+### `MODULE_NOT_FOUND` when Claude Code spawns kairo-mcp
+
+You're on a pre-v1.4.0 build that hard-coded the local-install path. Either:
+
+```bash
+# Update to latest (recommended)
+npm install -g kairo-mcp@latest
+
+# Or manually patch .mcp.json to use the global form
+```
+
+Replace the `kairo` entry in `.mcp.json` with:
+
+```json
+{
+  "mcpServers": {
+    "kairo": {
+      "command": "kairo-mcp",
+      "env": { "KAIRO_PROJECT_ROOT": "." }
+    }
+  }
+}
+```
+
+### Anything else
+
+Run `kairo doctor --json` and attach the output to a
+[bug report](https://github.com/sandy001-kki/Kairo/issues/new?template=bug_report.yml).
+The JSON shape is stable across v1.x; we can diagnose from the report.
 
 ---
 

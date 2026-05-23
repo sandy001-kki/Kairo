@@ -113,7 +113,9 @@ describe('kairo CLI', () => {
       const mcp = JSON.parse(await readFile(join(root, '.mcp.json'), 'utf8')) as {
         mcpServers: { kairo: { command: string } };
       };
-      expect(mcp.mcpServers.kairo.command).toBe('node');
+      // v1.4.0: init picks one of three valid forms based on environment.
+      // The test runner may or may not have kairo-mcp on PATH; both are OK.
+      expect(['node', 'kairo-mcp', 'npx']).toContain(mcp.mcpServers.kairo.command);
       expect(await readFile(join(root, '.gitignore'), 'utf8')).toContain('.kairo/');
       // Second run: skips both, doesn't error.
       const second = run(['init', '-C', root]);
