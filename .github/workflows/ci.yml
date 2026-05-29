@@ -49,11 +49,18 @@ jobs:
       - name: Format check
         run: npm run format:check
 
-      - name: Test
-        run: npm test
-
+      # Build BEFORE test: several tests spawn the compiled CLI
+      # (dist/cli/cli.js) as a subprocess (tests/doctorNonNode.test.ts,
+      # tests/cli.test.ts). Running the build first guarantees a complete,
+      # consistent dist/ exists before any test spawns it — otherwise those
+      # tests race against the dist/ left by the `prepare` step and
+      # intermittently import a mid-write module ("does not provide an export
+      # named …"), an observed flake on windows/macOS cells.
       - name: Build
         run: npm run build
+
+      - name: Test
+        run: npm test
 
   install-smoke:
     name: install smoke (pack → fresh project)
