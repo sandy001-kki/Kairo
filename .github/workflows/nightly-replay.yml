@@ -30,11 +30,13 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Test (193 tests)
-        run: npm test
-
+      # Build before test so the CLI-spawning tests run against a complete
+      # dist/ (matches ci.yml ordering; avoids the mid-write import flake).
       - name: Build
         run: npm run build
+
+      - name: Test
+        run: npm test
 
       - name: Snapshot round-trip determinism
         run: |
