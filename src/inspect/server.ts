@@ -18,6 +18,7 @@ import {
   renderTimeline,
 } from './render.js';
 import type { TimelineKind } from '../core/query/types.js';
+import { handleAtlas, isAtlasPath, ATLAS_CSP } from './atlas/atlasRoutes.js';
 
 /**
  * Local web inspector (v0.9.0, ADR-0011). Loopback-only by default. No
@@ -81,6 +82,24 @@ async function handle(
 ): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://x');
   const path = url.pathname;
+
+  // ── Atlas surface (v1.5.0, ADR-0019) ──────────────────────────────────
+  // Scoped CSP relaxation: only /atlas* responses allow same-origin scripts
+  // and styles (script-src 'self'; style-src 'self'). Everything else keeps
+  // the stricter JS-free CSP below.
+  if (isAtlasPath(path)) {
+    const atlas = await handleAtlas(path, url.searchParams, p.paths.root);
+    if (atlas) {
+      res.statusCode = atlas.status;
+      res.setHeader('Content-Type', atlas.contentType);
+      res.setHeader('Content-Security-Policy', ATLAS_CSP);
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Referrer-Policy', 'no-referrer');
+      res.end(atlas.body);
+      return;
+    }
+  }
+
   const send = (status: number, html: string): void => {
     res.statusCode = status;
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
