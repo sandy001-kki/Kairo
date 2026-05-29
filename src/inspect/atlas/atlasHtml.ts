@@ -71,6 +71,7 @@ export function atlasShellHtml(): string {
     <div class="atlas-stage">
       <canvas id="atlas-canvas" class="atlas-canvas" aria-label="Architecture map"></canvas>
       <p id="atlas-status" class="atlas-status">Loading…</p>
+      <aside id="atlas-detail" class="atlas-detail atlas-hidden" aria-label="Node detail"></aside>
       <div class="atlas-legend" aria-label="Legend">
         <div class="atlas-legend-title">Legend</div>
         <ul>

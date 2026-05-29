@@ -65,7 +65,7 @@ export const ATLAS_APP_JS = `(() => {
   }
   var model = {
     nodes: [], edges: [], pos2: {}, pos3: {}, screen: {}, sel: null, neighbors: {},
-    filters: emptyFilters(), query: '', matches: {}, matchNeighbors: {}
+    filters: emptyFilters(), query: '', matches: {}, matchNeighbors: {}, byId: {}
   };
 
   function radiusOf(n) { return 4 + (n.salience || 0) * 18; }
@@ -345,7 +345,90 @@ export const ATLAS_APP_JS = `(() => {
         if (ed.to === id) model.neighbors[ed.from] = true;
       }
     }
+    updateDetail(id);
     draw();
+  }
+
+  // ---- node detail panel (client-side, from the delivered payload) -------
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined && text !== null) e.textContent = String(text);
+    return e;
+  }
+  function hideDetail() {
+    var box = byId('atlas-detail'); if (box) { box.textContent = ''; box.classList.add('atlas-hidden'); }
+  }
+  function labelOf(id) { var n = model.byId[id]; return n ? n.label : id; }
+
+  function updateDetail(id) {
+    var box = byId('atlas-detail'); if (!box) return;
+    if (!id) { hideDetail(); return; }
+    var n = model.byId[id]; if (!n) { hideDetail(); return; }
+    box.textContent = '';
+
+    var head = el('div', 'atlas-detail-head');
+    head.appendChild(el('span', 'atlas-detail-title', n.label));
+    var close = el('button', 'atlas-detail-close', '×');
+    close.setAttribute('type', 'button');
+    close.setAttribute('aria-label', 'Close');
+    close.addEventListener('click', function () { selectNode(null); });
+    head.appendChild(close);
+    box.appendChild(head);
+
+    box.appendChild(el('div', 'atlas-detail-id', n.id));
+
+    // group + flag badges
+    var badges = el('div', 'atlas-detail-badges');
+    badges.appendChild(el('span', 'atlas-badge atlas-badge-group', n.group));
+    if (n.risk) badges.appendChild(el('span', 'atlas-badge atlas-badge-risk-' + n.risk, 'risk: ' + n.risk));
+    if (n.flags && n.flags.changed) badges.appendChild(el('span', 'atlas-badge', 'changed'));
+    if (n.flags && n.flags.checkpoint) badges.appendChild(el('span', 'atlas-badge', 'checkpoint'));
+    if (n.flags && n.flags.session) badges.appendChild(el('span', 'atlas-badge', 'session'));
+    box.appendChild(badges);
+
+    // metrics grid
+    var metrics = el('dl', 'atlas-detail-metrics');
+    var addMetric = function (k, v) { metrics.appendChild(el('dt', null, k)); metrics.appendChild(el('dd', null, v)); };
+    addMetric('salience', String(n.salience));
+    addMetric('centrality', String(n.centrality));
+    addMetric('fan-in', String(n.fanIn));
+    addMetric('fan-out', String(n.fanOut));
+    box.appendChild(metrics);
+
+    // edges
+    var incoming = [], outgoing = [];
+    for (var i = 0; i < model.edges.length; i++) {
+      var ed = model.edges[i];
+      if (ed.to === id) incoming.push(ed);
+      if (ed.from === id) outgoing.push(ed);
+    }
+    incoming.sort(function (a, b) { return a.from < b.from ? -1 : a.from > b.from ? 1 : 0; });
+    outgoing.sort(function (a, b) { return a.to < b.to ? -1 : a.to > b.to ? 1 : 0; });
+
+    box.appendChild(edgeSection('Depends on (out: ' + outgoing.length + ')', outgoing, 'to'));
+    box.appendChild(edgeSection('Depended on by (in: ' + incoming.length + ')', incoming, 'from'));
+
+    box.classList.remove('atlas-hidden');
+  }
+
+  function edgeSection(title, edges, endKey) {
+    var sec = el('div', 'atlas-detail-section');
+    sec.appendChild(el('div', 'atlas-detail-subtitle', title));
+    if (edges.length === 0) { sec.appendChild(el('div', 'atlas-detail-empty', 'none')); return sec; }
+    var ul = el('ul', 'atlas-detail-edges');
+    for (var i = 0; i < edges.length; i++) {
+      var other = edges[i][endKey];
+      var li = el('li', null);
+      var link = el('button', 'atlas-edge-link', labelOf(other));
+      link.setAttribute('type', 'button');
+      (function (oid) { link.addEventListener('click', function () { focusNode(oid); }); })(other);
+      li.appendChild(link);
+      if (edges[i].weight && edges[i].weight > 1) li.appendChild(el('span', 'atlas-edge-w', ' ×' + edges[i].weight));
+      ul.appendChild(li);
+    }
+    sec.appendChild(ul);
+    return sec;
   }
 
   function hitTest(sx, sy) {
@@ -541,19 +624,21 @@ export const ATLAS_APP_JS = `(() => {
       if (!g.hasGraph || g.nodes.length === 0) {
         model = {
           nodes: [], edges: [], pos2: {}, pos3: {}, screen: {}, sel: null, neighbors: {},
-          filters: emptyFilters(), query: '', matches: {}, matchNeighbors: {}
+          filters: emptyFilters(), query: '', matches: {}, matchNeighbors: {}, byId: {}
         };
-        clearSearch(); clearFilters();
+        clearSearch(); clearFilters(); hideDetail();
         setText('atlas-status', g.note || 'No graph to display.');
         resizeCanvas(); draw(); return;
       }
 
       model.nodes = g.nodes; model.edges = g.edges;
+      model.byId = {};
+      for (var bi = 0; bi < g.nodes.length; bi++) model.byId[g.nodes[bi].id] = g.nodes[bi];
       model.pos2 = layout2d(g);
       model.pos3 = (mode === '3d') ? layout3d(g) : {};
       model.sel = null; model.neighbors = {};
       model.query = ''; model.matches = {}; model.matchNeighbors = {};
-      clearSearch();
+      clearSearch(); hideDetail();
       setText('atlas-status', '');
       var st = byId('atlas-status'); if (st) st.classList.add('atlas-hidden');
       resizeCanvas();
@@ -665,6 +750,49 @@ body {
   border: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
   border-radius: 8px; backdrop-filter: blur(3px); max-width: 280px;
 }
+.atlas-detail {
+  position: absolute; top: 16px; left: 16px; z-index: 6;
+  width: 280px; max-height: calc(100% - 32px); overflow: auto;
+  padding: 14px 16px;
+  background: color-mix(in srgb, Canvas 92%, transparent);
+  color: CanvasText;
+  border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+  border-radius: 10px; box-shadow: 0 8px 28px color-mix(in srgb, CanvasText 28%, transparent);
+  backdrop-filter: blur(4px); font-size: 13px;
+}
+.atlas-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.atlas-detail-title { font-size: 15px; font-weight: 700; word-break: break-word; }
+.atlas-detail-close {
+  border: 0; background: transparent; color: inherit; cursor: pointer;
+  font-size: 18px; line-height: 1; padding: 0 4px; opacity: 0.7;
+}
+.atlas-detail-close:hover { opacity: 1; }
+.atlas-detail-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; opacity: 0.65; margin-top: 2px; word-break: break-all; }
+.atlas-detail-badges { display: flex; flex-wrap: wrap; gap: 4px; margin: 10px 0; }
+.atlas-badge {
+  font-size: 11px; padding: 2px 7px; border-radius: 999px;
+  background: color-mix(in srgb, CanvasText 12%, transparent);
+}
+.atlas-badge-group { background: color-mix(in srgb, #3b82f6 22%, transparent); }
+.atlas-badge-risk-medium { background: color-mix(in srgb, #d97706 30%, transparent); }
+.atlas-badge-risk-high { background: color-mix(in srgb, #dc2626 32%, transparent); }
+.atlas-detail-metrics {
+  display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px;
+  margin: 8px 0 4px;
+}
+.atlas-detail-metrics dt { opacity: 0.6; }
+.atlas-detail-metrics dd { margin: 0; font-variant-numeric: tabular-nums; }
+.atlas-detail-section { margin-top: 12px; }
+.atlas-detail-subtitle { font-weight: 600; font-size: 12px; opacity: 0.8; margin-bottom: 4px; }
+.atlas-detail-empty { opacity: 0.5; font-style: italic; font-size: 12px; }
+.atlas-detail-edges { list-style: none; margin: 0; padding: 0; }
+.atlas-detail-edges li { display: flex; align-items: baseline; gap: 2px; }
+.atlas-edge-link {
+  border: 0; background: transparent; color: #3b82f6; cursor: pointer;
+  font: inherit; padding: 2px 0; text-align: left;
+}
+.atlas-edge-link:hover { text-decoration: underline; }
+.atlas-edge-w { opacity: 0.55; font-size: 11px; }
 .atlas-legend-title { font-weight: 600; margin-bottom: 4px; }
 .atlas-legend ul { list-style: none; margin: 0 0 6px; padding: 0; }
 .atlas-legend li { display: flex; align-items: center; gap: 6px; opacity: 0.85; }
