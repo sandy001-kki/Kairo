@@ -1,11 +1,10 @@
 /**
- * Atlas HTML shell (v1.5.0, PR 3 — routes only).
+ * Atlas HTML shell (v1.5.0, PR 4 — 2D architecture map).
  *
- * Minimal, CSP-clean shell: no inline script, no inline style. The shell
- * references same-origin assets (`/atlas/app.css`, `/atlas/app.js`) by
- * absolute path so it resolves regardless of trailing slash. The interactive
- * 2D/3D renderer arrives in later PRs and replaces the placeholder body that
- * `app.js` populates; this PR only proves the route + CSP wiring end-to-end.
+ * CSP-clean: no inline script, no inline style. References same-origin assets
+ * (`/atlas/app.css`, `/atlas/app.js`) by absolute path. The shell provides the
+ * canvas stage, the controls bar (top-N selector + reset), a truncation
+ * banner, and a static legend; `app.js` drives the deterministic 2D renderer.
  */
 export function atlasShellHtml(): string {
   return `<!doctype html>
@@ -20,30 +19,47 @@ export function atlasShellHtml(): string {
     <header class="atlas-header">
       <h1>Kairo Atlas</h1>
       <p class="atlas-sub">
-        Read-only architecture map over local <code>.kairo/</code> state. No
+        Read-only 2D architecture map over local <code>.kairo/</code> state. No
         network, no remote assets.
       </p>
     </header>
-    <main id="atlas-root" class="atlas-main">
+    <div class="atlas-controls" role="toolbar" aria-label="Atlas controls">
+      <span id="atlas-overview" class="atlas-overview-line">—</span>
+      <span class="atlas-spacer"></span>
+      <label class="atlas-ctl">
+        Top
+        <select id="atlas-top" aria-label="Maximum nodes by salience">
+          <option value="25">25</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+          <option value="0">all</option>
+        </select>
+      </label>
+      <button id="atlas-reset" type="button" class="atlas-ctl">Reset view</button>
+    </div>
+    <div id="atlas-banner" class="atlas-banner atlas-hidden" role="status"></div>
+    <div class="atlas-stage">
+      <canvas id="atlas-canvas" class="atlas-canvas" aria-label="Architecture map"></canvas>
       <p id="atlas-status" class="atlas-status">Loading…</p>
-      <dl class="atlas-overview">
-        <dt>Repository</dt>
-        <dd id="atlas-repo">—</dd>
-        <dt>Graph</dt>
-        <dd id="atlas-kind">—</dd>
-        <dt>Totals</dt>
-        <dd id="atlas-counts">—</dd>
-        <dt>Freshness</dt>
-        <dd id="atlas-fresh">—</dd>
-      </dl>
-      <p id="atlas-trunc" class="atlas-trunc"></p>
-      <h2 class="atlas-h2">Top modules by salience</h2>
-      <ul id="atlas-nodes" class="atlas-nodes"></ul>
-      <p class="atlas-foot">
-        Interactive 2D/3D views arrive in a later release. This view is the
-        deterministic overview projection.
-      </p>
-    </main>
+      <div class="atlas-legend" aria-label="Legend">
+        <div class="atlas-legend-title">Legend</div>
+        <ul>
+          <li><span class="atlas-dot atlas-g-source"></span> source</li>
+          <li><span class="atlas-dot atlas-g-test"></span> test</li>
+          <li><span class="atlas-dot atlas-g-docs"></span> docs</li>
+          <li><span class="atlas-dot atlas-g-example"></span> example</li>
+          <li><span class="atlas-dot atlas-g-generated"></span> generated</li>
+          <li><span class="atlas-dot atlas-g-other"></span> other</li>
+        </ul>
+        <ul>
+          <li>Size = salience (degree centrality)</li>
+          <li>Ring = risk (amber/red)</li>
+          <li>Tick = changed by AI</li>
+          <li>Click a node to focus its neighbours</li>
+          <li>Scroll = zoom · drag = pan</li>
+        </ul>
+      </div>
+    </div>
     <noscript>
       Kairo Atlas needs JavaScript to render the architecture map. The
       underlying data is also available read-only at
