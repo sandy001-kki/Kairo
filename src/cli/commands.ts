@@ -12,6 +12,10 @@ import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { KairoClient } from '../sdk/index.js';
 import { kairoPaths } from '../storage/paths.js';
+import { createCapsule } from '../core/capsule/index.js';
+import { buildAgentsMd, writeAgentsMd } from '../core/capsule/agentsMd.js';
+import { CAPSULE_MODES, CAPSULE_TARGETS } from '../core/capsule/capsuleTypes.js';
+import type { CapsuleMode, CapsuleTarget } from '../core/capsule/capsuleTypes.js';
 import { exportSnapshot } from '../snapshot/export.js';
 import { importSnapshot } from '../snapshot/import.js';
 import { compact } from '../core/compaction/compactor.js';
@@ -166,6 +170,143 @@ const continueCmd: CommandSpec = {
   examples: ['kairo continue'],
   run(ctx) {
     return briefCmd.run({ ...ctx, argv: ['--normal', ...ctx.argv] });
+  },
+};
+
+// ── capsule ────────────────────────────────────────────────────────────
+
+const capsuleCmd: CommandSpec = {
+  name: 'capsule',
+  summary: 'Generate a portable AI handoff capsule (Atlas Capsule).',
+  flags: [
+    { name: 'mode', type: 'string', default: 'standard', help: 'tiny | standard | deep.' },
+    {
+      name: 'target',
+      type: 'string',
+      default: 'generic',
+      help: 'claude | codex | cursor | generic.',
+    },
+    { name: 'output', short: 'o', type: 'string', help: 'Write the capsule to this file.' },
+    { name: 'max-chars', type: 'number', help: 'Override the mode char budget.' },
+    {
+      name: 'agents-md',
+      type: 'boolean',
+      help: 'Write AGENTS.md (Codex). Refuses to clobber without --force.',
+    },
+    { name: 'force', type: 'boolean', help: 'Allow overwriting an existing AGENTS.md.' },
+  ],
+  help:
+    'Builds a token-budgeted continuation package from the latest checkpoint, ' +
+    'Atlas projection, and repo intelligence. It reduces unnecessary rescanning by ' +
+    'telling the next agent what changed, what to read first, and what is safe to ' +
+    'skip initially. A trusted starting point — not a guarantee.\n\n' +
+    'Default: mode=standard, target=generic. Deep capsules are only printed when ' +
+    'explicitly requested. With --output the capsule is written to a file and a ' +
+    'short summary is printed instead.',
+  examples: [
+    'kairo capsule',
+    'kairo capsule --mode tiny',
+    'kairo capsule --target codex --mode standard',
+    'kairo capsule --target codex --agents-md',
+    'kairo capsule --target claude --output capsule.md',
+  ],
+  async run(ctx) {
+    if (!requireKairo(ctx)) return { exitCode: 3 };
+    const { values } = parseFlags(ctx.argv, capsuleCmd.flags ?? []);
+
+    const mode = String(values.mode) as CapsuleMode;
+    const target = String(values.target) as CapsuleTarget;
+    if (!CAPSULE_MODES.includes(mode)) {
+      ctx.out.error(`Invalid --mode "${values.mode}". Use: ${CAPSULE_MODES.join(' | ')}.`);
+      return { exitCode: 2 };
+    }
+    if (!CAPSULE_TARGETS.includes(target)) {
+      ctx.out.error(`Invalid --target "${values.target}". Use: ${CAPSULE_TARGETS.join(' | ')}.`);
+      return { exitCode: 2 };
+    }
+
+    const opts: {
+      mode: CapsuleMode;
+      target: CapsuleTarget;
+      maxChars?: number;
+      projectRoot: string;
+    } = {
+      mode,
+      target,
+      projectRoot: ctx.projectRoot,
+    };
+    const maxChars = values['max-chars'];
+    if (typeof maxChars === 'number' && maxChars > 0) opts.maxChars = maxChars;
+
+    const { projection, rendered } = await createCapsule(opts);
+
+    // ── AGENTS.md export (Codex) ────────────────────────────────────────
+    if (values['agents-md']) {
+      const body = buildAgentsMd(rendered, projection);
+      const r = await writeAgentsMd(ctx.projectRoot, body, { force: Boolean(values.force) });
+      if (!r.written) {
+        if (ctx.out.maybeJson({ ok: false, reason: 'agents-md-exists', path: r.path })) {
+          return { exitCode: 4 };
+        }
+        ctx.out.error(r.refusedReason ?? 'Refused to write AGENTS.md.');
+        return { exitCode: 4 };
+      }
+      if (ctx.out.maybeJson({ ok: true, path: r.path, chars: rendered.chars, mode, target })) {
+        return { exitCode: 0 };
+      }
+      ctx.out.info(
+        `${ctx.out.green('wrote')} ${r.path} ${ctx.out.dim(`(${rendered.chars} chars, ${mode}/${target})`)}`,
+      );
+      return { exitCode: 0 };
+    }
+
+    // ── file output ─────────────────────────────────────────────────────
+    if (typeof values.output === 'string' && values.output.length > 0) {
+      const outPath = resolve(ctx.projectRoot, values.output);
+      await writeFile(
+        outPath,
+        rendered.text.endsWith('\n') ? rendered.text : rendered.text + '\n',
+        'utf8',
+      );
+      if (
+        ctx.out.maybeJson({
+          path: outPath,
+          chars: rendered.chars,
+          mode,
+          target,
+          truncated: rendered.truncated,
+        })
+      ) {
+        return { exitCode: 0 };
+      }
+      ctx.out.kv([
+        ['path', outPath],
+        ['mode', `${mode} / ${target}`],
+        ['chars', String(rendered.chars)],
+        ['budget', String(rendered.maxChars)],
+        ['truncated', rendered.truncated ? ctx.out.yellow('yes') : ctx.out.green('no')],
+      ]);
+      return { exitCode: 0 };
+    }
+
+    // ── stdout ──────────────────────────────────────────────────────────
+    if (
+      ctx.out.maybeJson({
+        mode,
+        target,
+        chars: rendered.chars,
+        truncated: rendered.truncated,
+        maxChars: rendered.maxChars,
+        readFirst: rendered.readFirst,
+        skipInitially: rendered.skipInitially,
+        text: rendered.text,
+      })
+    ) {
+      return { exitCode: 0 };
+    }
+    ctx.out.write(rendered.text);
+    if (!rendered.text.endsWith('\n')) ctx.out.line();
+    return { exitCode: 0 };
   },
 };
 
@@ -1043,6 +1184,7 @@ export const COMMANDS: CommandSpec[] = [
   statusCmd,
   briefCmd,
   continueCmd,
+  capsuleCmd,
   sessionsCmd,
   checkpointsCmd,
   graphCmd,

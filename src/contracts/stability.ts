@@ -138,6 +138,15 @@ export const STABILITY: readonly StabilityEntry[] = [
     'completion',
     'version',
   ]),
+
+  // ── Atlas Capsule CLI (v1.6.0, ADR-0020) — experimental ──────────────
+  {
+    surface: 'cli-command',
+    id: 'capsule',
+    tier: 'experimental',
+    since: '1.6.0',
+    note: 'Portable AI handoff package; budgeted projection of existing state.',
+  },
 ];
 
 function stableTools(since: string, names: string[]): StabilityEntry[] {
