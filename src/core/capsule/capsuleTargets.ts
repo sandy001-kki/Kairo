@@ -31,8 +31,7 @@ export const TARGET_PROFILES: Record<CapsuleTarget, TargetProfile> = {
   claude: {
     target: 'claude',
     label: 'Claude Code',
-    intro:
-      'Continuation package for Claude Code. Resume from this instead of rescanning the repo.',
+    intro: 'Continuation package for Claude Code. Resume from this instead of rescanning the repo.',
     agentInstructions: [
       'If Kairo MCP is wired, call `kairo_session_start` first — it returns the live brief.',
       'Use `kairo_memory_search` instead of re-reading the tree when you need architectural context.',
